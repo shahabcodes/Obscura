@@ -20,6 +20,12 @@ android {
         versionCode = providers.gradleProperty("obscura.versionCode").get().toInt()
         versionName = providers.gradleProperty("obscura.versionName").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 64-bit only: every phone sold since 2019 is arm64; x86_64 is for emulators.
+        // Dropping the 32-bit SQLCipher libraries roughly halves the APK.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     ksp {

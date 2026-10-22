@@ -8,6 +8,29 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+### Added
+- Gallery of photos and videos:
+  - Grouped by month by default, with each month's item count and total size, and a floating month label while scrolling.
+  - Sort by date, size or type, either direction. Size and type sorts show a badge on each tile.
+  - 3, 4 or 5 columns, and filters for All, Photos, Videos, Screenshots and Favourites. Settings are remembered.
+- Photo viewer: swipe between items, pinch or double-tap to zoom, info panel (date taken, size, dimensions, length, date sealed, encryption), favourite and shred.
+- Reel mode: full-screen vertical slideshow that advances every 3, 5 or 10 seconds, with pause, previous/next, double-tap to favourite (with a heart burst) and a slow zoom on stills.
+- Encrypted thumbnails: generated once from the sealed file (photos honour their rotation; videos use a frame decrypted on the fly), stored encrypted with the file's own key, and cached only in memory. The cache is cleared when the vault locks.
+- Shredding a file removes its index row (and with it the key), its encrypted data and its thumbnail.
+- Home's Videos tile opens the gallery filtered to videos.
+- Every gallery tile has a spoken label for screen readers.
+
+### Changed
+- The APK only includes 64-bit native code (arm64 phones and x86_64 emulators), which roughly halves its size. 32-bit-only phones are no longer supported.
+
+### Fixed
+- **The encrypted database could fail with "file is not a database" when several reads ran at the same time** (for example the home totals during an import). The database key was wiped right after opening, while SQLCipher still needed it for extra connections. It now stays in memory exactly as long as the database is open and is wiped on lock. This affected 0.2.0 and 0.3.0; please update.
+
+### Tests
+- 61 unit tests and 25 on-device tests, including the gallery UI flow, reel timing on a controlled clock (advance, wrap-around, pause, resume), parallel database reads, encrypted thumbnails, and a video thumbnail decoded from a real sealed MP4.
+
 ## [0.3.0] - 2026-10-22
 
 ### Added
@@ -70,7 +93,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/shahabcodes/Obscura/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/shahabcodes/Obscura/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shahabcodes/Obscura/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shahabcodes/Obscura/releases/tag/v0.1.0

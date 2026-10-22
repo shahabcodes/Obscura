@@ -26,9 +26,20 @@ class OpenVault internal constructor(
     val keys: VaultKeys,
     val database: IndexDatabase,
     val files: FileStore,
+    val thumbnails: ThumbnailStore,
+    /** SQLCipher keeps using this array to open extra connections, so it lives until close. */
+    private val databaseKey: ByteArray,
 ) {
+    /** Removes a file for good: its index row (with its key), its blob and its thumbnail. */
+    suspend fun shred(file: VaultFile) {
+        files.delete(file)
+        thumbnails.delete(file.id)
+    }
+
     internal fun close() {
+        thumbnails.clear()
         database.close()
+        databaseKey.wipe()
         keys.close()
     }
 }
@@ -216,11 +227,11 @@ class VaultSession @Inject constructor(
                 it.openHelper.writableDatabase
             }
         } catch (e: Exception) {
+            dbKey.wipe()
             keys.close()
             throw e
-        } finally {
-            dbKey.wipe()
         }
-        _state.value = VaultState.Unlocked(OpenVault(keys, database, FileStore(store, keys.fileCipher, database.files())))
+        val files = FileStore(store, keys.fileCipher, database.files())
+        _state.value = VaultState.Unlocked(OpenVault(keys, database, files, ThumbnailStore(store, keys.fileCipher, files), dbKey))
     }
 }

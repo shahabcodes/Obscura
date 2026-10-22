@@ -65,6 +65,9 @@ interface FileDao {
 
     @Query("DELETE FROM files WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("UPDATE files SET favorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(id: String, favorite: Boolean)
 }
 
 @Database(entities = [VaultFile::class], version = 1, exportSchema = true)
@@ -78,7 +81,8 @@ abstract class IndexDatabase : RoomDatabase() {
 
         /**
          * Opens the SQLCipher database with [key] (256 bits derived from the master key).
-         * The key array is consumed and wiped by SQLCipher.
+         * SQLCipher reuses the same array whenever it opens another connection, so the caller
+         * must keep it intact until the database is closed, and wipe it afterwards.
          */
         fun open(context: Context, file: File, key: ByteArray): IndexDatabase {
             file.parentFile?.mkdirs()

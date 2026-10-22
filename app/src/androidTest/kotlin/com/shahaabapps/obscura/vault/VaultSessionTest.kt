@@ -5,7 +5,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.shahaabapps.obscura.crypto.KdfParams
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.crypto.KeystoreGate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -92,6 +96,24 @@ class VaultSessionTest {
         assertEquals("beach.jpg", row.name)
         assertArrayEquals(content, vault.files.open(row).use { it.readBytes() })
         reopened.lock()
+    }
+
+    /**
+     * Regression: the database key array used to be wiped right after opening, so any extra
+     * connection SQLCipher opened for parallel reads failed with "file is not a database".
+     */
+    @Test
+    fun parallelReadsOpenExtraConnectionsSuccessfully() = runTest {
+        val session = newSession()
+        session.create("passphrase".toCharArray())
+        val vault = session.openVault!!
+        repeat(5) { vault.files.put(ByteArray(64) { b -> (b * it).toByte() }.inputStream(), IncomingFile("f$it.bin", "application/octet-stream", it.toLong())) }
+        val dao = vault.database.files()
+        val results: List<Int> = withContext(Dispatchers.IO) {
+            List(16) { async { dao.observeAll().first().size + dao.countWithHash("none") } }.awaitAll()
+        }
+        assertTrue(results.all { it == 5 })
+        session.lock()
     }
 
     @Test

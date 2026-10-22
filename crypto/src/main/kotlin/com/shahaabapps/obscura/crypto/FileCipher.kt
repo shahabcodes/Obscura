@@ -26,17 +26,21 @@ class FileCipher internal constructor(private val keys: VaultKeys) {
         }
     }
 
-    /** Wraps [output]; everything written is encrypted. Close the returned stream to finish the file. */
-    fun encryptingStream(wrappedKey: ByteArray, fileId: String, output: OutputStream): OutputStream =
-        streamingAead(wrappedKey, fileId).newEncryptingStream(output, contentAad(fileId))
+    /**
+     * Wraps [output]; everything written is encrypted. Close the returned stream to finish the file.
+     * [part] separates the file's contents from derived data such as its thumbnail: each part is
+     * bound to its own associated data, so one can never be swapped in for the other.
+     */
+    fun encryptingStream(wrappedKey: ByteArray, fileId: String, output: OutputStream, part: String = PART_CONTENT): OutputStream =
+        streamingAead(wrappedKey, fileId).newEncryptingStream(output, partAad(fileId, part))
 
     /** Reads plaintext from an encrypted [input]. Throws an IOException on tampering. */
-    fun decryptingStream(wrappedKey: ByteArray, fileId: String, input: InputStream): InputStream =
-        streamingAead(wrappedKey, fileId).newDecryptingStream(input, contentAad(fileId))
+    fun decryptingStream(wrappedKey: ByteArray, fileId: String, input: InputStream, part: String = PART_CONTENT): InputStream =
+        streamingAead(wrappedKey, fileId).newDecryptingStream(input, partAad(fileId, part))
 
     /** Random-access plaintext view over an encrypted [channel], used for seeking in media. */
-    fun seekableChannel(wrappedKey: ByteArray, fileId: String, channel: SeekableByteChannel): SeekableByteChannel =
-        streamingAead(wrappedKey, fileId).newSeekableDecryptingChannel(channel, contentAad(fileId))
+    fun seekableChannel(wrappedKey: ByteArray, fileId: String, channel: SeekableByteChannel, part: String = PART_CONTENT): SeekableByteChannel =
+        streamingAead(wrappedKey, fileId).newSeekableDecryptingChannel(channel, partAad(fileId, part))
 
     private fun streamingAead(wrappedKey: ByteArray, fileId: String): StreamingAead {
         val fileKey = KeyWrap.unwrap(keys.master(), wrappedKey, fileKeyAad(fileId))
@@ -45,10 +49,13 @@ class FileCipher internal constructor(private val keys: VaultKeys) {
 
     private fun fileKeyAad(fileId: String) = Vault.aad("obscura/file-key/v1:$fileId", keys.vaultId)
 
-    private fun contentAad(fileId: String) = "obscura/content/v1:$fileId".toByteArray()
+    /** "obscura/content/v1:<id>" for contents (the 0.1 format), "obscura/thumbnail/v1:<id>" etc. */
+    private fun partAad(fileId: String, part: String) = "obscura/$part/v1:$fileId".toByteArray()
 
     companion object {
         const val FILE_KEY_SIZE = 32
         const val SEGMENT_SIZE = 1 shl 20
+        const val PART_CONTENT = "content"
+        const val PART_THUMBNAIL = "thumbnail"
     }
 }

@@ -105,6 +105,23 @@ class FileCipherTest {
     }
 
     @Test
+    fun thumbnailCannotBeSwappedForContent() {
+        val key = cipher.newWrappedFileKey("photo")
+        val thumb = ByteArrayOutputStream().also { out ->
+            cipher.encryptingStream(key, "photo", out, FileCipher.PART_THUMBNAIL).use { it.write(byteArrayOf(1, 2, 3)) }
+        }.toByteArray()
+        assertArrayEquals(
+            byteArrayOf(1, 2, 3),
+            cipher.decryptingStream(key, "photo", ByteArrayInputStream(thumb), FileCipher.PART_THUMBNAIL).use { it.readBytes() },
+        )
+        try {
+            cipher.decryptingStream(key, "photo", ByteArrayInputStream(thumb)).use { it.readBytes() }
+            fail("A thumbnail must not decrypt as the file's contents")
+        } catch (expected: IOException) {
+        }
+    }
+
+    @Test
     fun filesSurviveLockAndUnlock() {
         val key = cipher.newWrappedFileKey("persist")
         val sealed = encrypt(plaintext, key, "persist")

@@ -19,6 +19,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import com.shahaabapps.obscura.ui.gallery.GalleryFilter
+import com.shahaabapps.obscura.ui.gallery.GalleryScreen
+import com.shahaabapps.obscura.ui.gallery.GalleryViewModel
+import com.shahaabapps.obscura.ui.gallery.ReelScreen
+import com.shahaabapps.obscura.ui.gallery.ViewerScreen
 import com.shahaabapps.obscura.ui.importer.ImportScreen
 import com.shahaabapps.obscura.ui.screens.HomeScreen
 import com.shahaabapps.obscura.ui.screens.HomeViewModel
@@ -49,6 +54,8 @@ object Routes {
     const val UNLOCK_RECOVERY = "unlock/recovery"
     const val HOME = "home"
     const val GALLERY = "gallery"
+    const val VIEWER = "viewer"
+    const val REEL = "reel"
     const val VIDEOS = "videos"
     const val AUDIO = "audio"
     const val DOCS = "docs"
@@ -101,16 +108,51 @@ fun ObscuraNavHost(
             unlockScreens(navController)
             composable(Routes.HOME) {
                 val home: HomeViewModel = hiltViewModel()
+                val gallery: GalleryViewModel = hiltViewModel()
                 val state by home.state.collectAsStateWithLifecycle()
                 HomeScreen(
                     state = state,
                     onLock = session::lock,
-                    onOpen = { route -> navController.navigate(route) },
+                    onOpen = { route ->
+                        // The Photos tile opens the whole gallery, whatever filter was used last.
+                        if (route == Routes.GALLERY) gallery.update { it.copy(filter = GalleryFilter.ALL) }
+                        navController.navigate(route)
+                    },
                 )
             }
             placeholder(navController, Routes.RESTORE, "Restore", 9, "Bring a vault back from an encrypted USB backup.")
-            placeholder(navController, Routes.GALLERY, "Gallery", 5, "Month groups, sort by date, size or type, and Reel mode.")
-            placeholder(navController, Routes.VIDEOS, "Videos", 5, "Decrypt-while-playing video with seeking.")
+            composable(Routes.GALLERY) {
+                GalleryScreen(
+                    viewModel = hiltViewModel(),
+                    onBack = { navController.popBackStack() },
+                    onOpen = { id -> navController.navigate("${Routes.VIEWER}/$id") },
+                    onReel = { id -> navController.navigate("${Routes.REEL}/$id") },
+                    onImport = { navController.navigateToTab(Routes.IMPORT) },
+                )
+            }
+            composable("${Routes.VIEWER}/{id}") { entry ->
+                ViewerScreen(
+                    viewModel = hiltViewModel(),
+                    startId = entry.arguments?.getString("id").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onReel = { id -> navController.navigate("${Routes.REEL}/$id") },
+                )
+            }
+            composable("${Routes.REEL}/{id}") { entry ->
+                ReelScreen(
+                    viewModel = hiltViewModel(),
+                    startId = entry.arguments?.getString("id").orEmpty(),
+                    onClose = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.VIDEOS) {
+                // Opens the gallery filtered to videos.
+                val gallery: GalleryViewModel = hiltViewModel()
+                LaunchedEffect(Unit) {
+                    gallery.update { it.copy(filter = GalleryFilter.VIDEOS) }
+                    navController.navigate(Routes.GALLERY) { popUpTo(Routes.VIDEOS) { inclusive = true } }
+                }
+            }
             placeholder(navController, Routes.AUDIO, "Audio", 5, "Waveform player and queue.")
             placeholder(navController, Routes.DOCS, "Documents", 5, "PDFs and documents rendered in memory.")
             placeholder(navController, Routes.SEARCH, "Search", 6, "Instant search over the encrypted index.", showBack = false)
