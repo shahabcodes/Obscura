@@ -8,6 +8,31 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
+### Added
+- Vault setup flow:
+  - Passphrase screen with a live strength meter, estimated crack time, a 7-word generator and a repeat field. A vault can only be created with a "Good" or stronger passphrase.
+  - Recovery key screen (8 groups of 4) with show/hide and a "written down" confirmation.
+  - Optional 6-digit PIN for everyday unlocking.
+  - Optional fingerprint unlock on phones with a strong (class 3) sensor.
+- Unlock screens: PIN pad, automatic fingerprint prompt, passphrase unlock and recovery-key unlock.
+- Lockout after wrong attempts: 4 free tries, then waits of 1, 5, 15 and 60 minutes. The timer uses the phone's boot clock, so changing the time doesn't skip it, and a reboot restarts the current wait.
+- Auto-lock: immediately when the screen turns off, and 30 seconds after leaving the app.
+- Encrypted index database (SQLCipher) holding file names, dates and per-file keys, keyed from the master key.
+- Sealed file store: contents are encrypted into a temporary file and only moved into place once indexed, with a SHA-256 fingerprint recorded for duplicate detection later.
+- The PIN copy of the master key is wrapped by a non-exportable Android Keystore key, so a copied PIN file can't be brute-forced on another device.
+- Home screen shows real totals (size, files per type) from the vault.
+- Tests: 46 unit tests and 11 on-device tests, including full setup/unlock UI flows, an on-disk check that the database is unreadable, and auto-lock on screen-off and backgrounding.
+
+### Changed
+- The Home lock button now locks the vault and returns to the lock screen.
+- Removed the debug-only "preview app UI" shortcut; the app now opens on Welcome, Unlock or Home depending on the vault's state.
+- A recovery key with a typo (caught by its checksum) no longer counts as a failed attempt.
+
+### Fixed
+- The welcome card showed a hard-coded "V0.1"; it now shows the installed version.
+
 ## [0.1.0] - 2026-10-22
 
 ### Added
@@ -26,5 +51,6 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/shahabcodes/Obscura/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shahabcodes/Obscura/releases/tag/v0.1.0

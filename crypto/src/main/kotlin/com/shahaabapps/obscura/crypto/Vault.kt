@@ -22,6 +22,13 @@ class VaultKeys internal constructor(
         return masterKey
     }
 
+    /**
+     * Derives an independent 256-bit key for one purpose (for example the index database),
+     * so the master key itself is never handed to other components. The caller wipes the result.
+     */
+    fun deriveKey(purpose: String): ByteArray =
+        Vault.hkdfSha256(master(), vaultId, "obscura/subkey/v1:$purpose".toByteArray(), 32)
+
     override fun close() {
         isClosed = true
         masterKey.wipe()

@@ -4,16 +4,22 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import com.shahaabapps.obscura.ui.navigation.ObscuraNavHost
 import com.shahaabapps.obscura.ui.theme.ObscuraTheme
+import com.shahaabapps.obscura.vault.VaultSession
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+/** FragmentActivity because BiometricPrompt needs one. */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+
+    @Inject
+    lateinit var session: VaultSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Block screenshots, screen recording and the preview thumbnail in recent apps.
@@ -27,7 +33,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ObscuraTheme {
-                ObscuraNavHost()
+                ObscuraNavHost(session)
             }
         }
     }

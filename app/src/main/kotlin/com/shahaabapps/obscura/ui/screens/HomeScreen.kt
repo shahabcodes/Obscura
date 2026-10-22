@@ -43,13 +43,11 @@ import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.navigation.Routes
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
+import com.shahaabapps.obscura.vault.FileKind
 
-/**
- * The bento home screen. Counts are empty until the vault index exists (phase 2);
- * the layout and navigation are final.
- */
+/** The bento home screen, with live totals from the encrypted index. */
 @Composable
-fun HomeScreen(onLock: () -> Unit, onOpen: (String) -> Unit) {
+fun HomeScreen(state: HomeUiState, onLock: () -> Unit, onOpen: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -80,16 +78,20 @@ fun HomeScreen(onLock: () -> Unit, onOpen: (String) -> Unit) {
         ) {
             Icon(Icons.Outlined.Search, contentDescription = null, tint = Prism.Muted)
             Spacer(Modifier.width(10.dp))
-            Text("Search sealed files", style = PrismType.body, color = Prism.Muted)
+            Text(
+                if (state.totalFiles > 0) "Search %,d sealed files".format(state.totalFiles) else "Search sealed files",
+                style = PrismType.body,
+                color = Prism.Muted,
+            )
         }
 
-        StorageCard()
+        StorageCard(state)
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PhotosTile(Modifier.weight(1f).height(258.dp)) { onOpen(Routes.GALLERY) }
+            PhotosTile(Modifier.weight(1f).height(258.dp), summary(state.of(FileKind.PHOTO), "photos")) { onOpen(Routes.GALLERY) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ColorTile("Videos", "No videos yet", Icons.Outlined.PlayArrow, Prism.Pink, Modifier.height(124.dp)) { onOpen(Routes.VIDEOS) }
-                ColorTile("Audio", "No audio yet", Icons.Outlined.GraphicEq, Prism.Mint, Modifier.height(124.dp)) { onOpen(Routes.AUDIO) }
+                ColorTile("Videos", summary(state.of(FileKind.VIDEO), "videos"), Icons.Outlined.PlayArrow, Prism.Pink, Modifier.height(124.dp)) { onOpen(Routes.VIDEOS) }
+                ColorTile("Audio", summary(state.of(FileKind.AUDIO), "audio"), Icons.Outlined.GraphicEq, Prism.Mint, Modifier.height(124.dp)) { onOpen(Routes.AUDIO) }
             }
         }
 
@@ -108,15 +110,18 @@ fun HomeScreen(onLock: () -> Unit, onOpen: (String) -> Unit) {
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text("Documents", style = PrismType.heading, color = Prism.Ink)
-                Text("NO DOCUMENTS YET", style = PrismType.label, color = Prism.Ink)
+                Text(summary(state.of(FileKind.DOCUMENT), "documents").uppercase(), style = PrismType.label, color = Prism.Ink)
             }
             Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = Prism.Ink)
         }
     }
 }
 
+private fun summary(kind: KindSummary, noun: String): String =
+    if (kind.count == 0) "No $noun yet" else "%,d · %s".format(kind.count, formatBytes(kind.bytes))
+
 @Composable
-private fun StorageCard() {
+private fun StorageCard(state: HomeUiState) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -132,17 +137,35 @@ private fun StorageCard() {
         Column {
             Text("SEALED ON THIS PHONE", style = PrismType.label, color = Prism.Ink)
             Spacer(Modifier.height(8.dp))
-            Text("0 B", style = PrismType.stat, color = Prism.Ink)
+            Text(formatBytes(state.totalBytes), style = PrismType.stat, color = Prism.Ink)
             Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.18f)))
+            Row(Modifier.fillMaxWidth().height(8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                val segments = listOf(
+                    FileKind.PHOTO to Prism.Cobalt,
+                    FileKind.VIDEO to Prism.Pink,
+                    FileKind.AUDIO to Prism.Ink,
+                    FileKind.DOCUMENT to Prism.Orange,
+                ).filter { state.of(it.first).bytes > 0 }
+                if (segments.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.18f)))
+                } else {
+                    segments.forEach { (kind, color) ->
+                        Box(Modifier.weight(state.of(kind).bytes.toFloat()).height(8.dp).clip(CircleShape).background(color))
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
-            Text("Vault is empty · import files to begin", style = PrismType.body.copy(fontSize = PrismType.label.fontSize), color = Prism.Ink)
+            Text(
+                if (state.totalFiles == 0) "Vault is empty · import files to begin" else "%,d files sealed".format(state.totalFiles),
+                style = PrismType.body.copy(fontSize = PrismType.label.fontSize),
+                color = Prism.Ink,
+            )
         }
     }
 }
 
 @Composable
-private fun PhotosTile(modifier: Modifier, onClick: () -> Unit) {
+private fun PhotosTile(modifier: Modifier, subtitle: String, onClick: () -> Unit) {
     Box(
         modifier = modifier
             .prismBlock(Prism.Cobalt)
@@ -165,7 +188,7 @@ private fun PhotosTile(modifier: Modifier, onClick: () -> Unit) {
         }
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             Text("Photos", style = PrismType.heading.copy(fontSize = PrismType.title.fontSize), color = Prism.Paper)
-            Text("NO PHOTOS YET", style = PrismType.label, color = Prism.Paper)
+            Text(subtitle.uppercase(), style = PrismType.label, color = Prism.Paper)
         }
     }
 }

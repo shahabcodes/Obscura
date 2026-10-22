@@ -16,6 +16,12 @@ Requirements: JDK 17 and the Android SDK (API 35).
 
 The debug APK is written to `app/build/outputs/apk/debug/`.
 
+On-device tests (real SQLCipher, Keystore and full UI flows) need an emulator or phone:
+
+```bash
+./gradlew connectedDebugAndroidTest
+```
+
 ## Releases
 
 1. Bump `obscura.versionName` and `obscura.versionCode` in `gradle.properties`.

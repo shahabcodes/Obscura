@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +29,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.shahaabapps.obscura.BuildConfig
 import com.shahaabapps.obscura.ui.components.GhostButton
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.theme.Prism
@@ -39,7 +39,6 @@ import com.shahaabapps.obscura.ui.theme.PrismType
 fun WelcomeScreen(
     onCreate: () -> Unit,
     onRestore: () -> Unit,
-    onPreview: (() -> Unit)?,
 ) {
     Column(
         modifier = Modifier
@@ -57,7 +56,7 @@ fun WelcomeScreen(
         ) {
             BauhausArt(Modifier.fillMaxSize())
             Text(
-                "OBSCURA / V0.1 / OFFLINE",
+                "OBSCURA / V${BuildConfig.VERSION_NAME} / OFFLINE",
                 style = PrismType.label,
                 color = Prism.Paper,
                 modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),
@@ -85,11 +84,6 @@ fun WelcomeScreen(
         PillButton("Create my vault", onClick = onCreate, trailing = Icons.AutoMirrored.Outlined.ArrowForward)
         Spacer(Modifier.height(10.dp))
         GhostButton("Restore from a backup drive", onClick = onRestore)
-        if (onPreview != null) {
-            TextButton(onClick = onPreview, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                Text("Preview app UI (debug build)", style = PrismType.label, color = Prism.Muted)
-            }
-        }
     }
 }
 
