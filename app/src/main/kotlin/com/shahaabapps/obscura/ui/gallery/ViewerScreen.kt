@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material3.AlertDialog
@@ -69,6 +70,7 @@ import com.shahaabapps.obscura.vault.VaultFile
 import java.text.DateFormat
 import java.util.Date
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Unit, onReel: (String) -> Unit, onPlay: (String) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -87,6 +89,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
     var zoomed by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
+    var pickingAlbum by remember { mutableStateOf(false) }
     val current = files.getOrNull(pager.currentPage.coerceAtMost(files.lastIndex)) ?: return
 
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
@@ -124,6 +127,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
             ) {
                 BarAction(Icons.Outlined.Info, "Info", active = showInfo) { showInfo = !showInfo }
                 BarAction(Icons.Outlined.Slideshow, "Reel", active = false) { onReel(current.id) }
+                BarAction(Icons.Outlined.Folder, "Album", active = current.albumId != null) { pickingAlbum = true }
                 BarAction(Icons.Outlined.DeleteForever, "Shred", active = false, tint = Prism.Orange) { confirmShred = current }
             }
         }
@@ -133,6 +137,14 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
         ShredDialog(file, onDismiss = { confirmShred = null }) {
             confirmShred = null
             viewModel.shred(file)
+        }
+    }
+    if (pickingAlbum) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { pickingAlbum = false },
+            containerColor = Prism.Surface,
+        ) {
+            com.shahaabapps.obscura.ui.organize.AlbumPicker(current.id, current.albumId, onDone = { pickingAlbum = false })
         }
     }
 }

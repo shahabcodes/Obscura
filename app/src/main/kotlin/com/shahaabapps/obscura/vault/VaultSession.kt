@@ -111,6 +111,36 @@ class VaultSession @Inject constructor(
         return attempt(key::wipe) { Vault.unlock(store.readHeader(), key) }
     }
 
+    /**
+     * Replaces the passphrase. [current] must be right, and wrong guesses count against the same
+     * lockout as unlocking, so an unlocked phone can't be used to try passphrases freely.
+     * The master key is only re-wrapped: no file is re-encrypted, and the recovery key,
+     * PIN and fingerprint keep working.
+     */
+    suspend fun changePassphrase(current: CharArray, replacement: CharArray): UnlockResult = withContext(Dispatchers.Default) {
+        try {
+            val vault = openVault ?: return@withContext UnlockResult.Failed("Unlock the vault first")
+            val remaining = lockout.remainingMs()
+            if (remaining > 0) return@withContext UnlockResult.LockedOut(remaining)
+            val header = store.readHeader()
+            try {
+                Vault.unlock(header, current).close()
+            } catch (e: WrongSecretException) {
+                lockout.recordFailure()
+                val wait = lockout.remainingMs()
+                return@withContext if (wait > 0) UnlockResult.LockedOut(wait) else UnlockResult.Wrong(lockout.freeAttemptsLeft())
+            }
+            lockout.recordSuccess()
+            store.writeHeader(Vault.changePassphrase(header, vault.keys, replacement, kdfParams))
+            UnlockResult.Success
+        } catch (e: Exception) {
+            UnlockResult.Failed("The passphrase could not be changed: ${e.message}")
+        } finally {
+            current.wipe()
+            replacement.wipe()
+        }
+    }
+
     fun hasPin(): Boolean = store.readPin() != null
 
     suspend fun setPin(pin: CharArray) = withContext(Dispatchers.Default) {

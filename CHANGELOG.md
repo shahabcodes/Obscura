@@ -8,6 +8,24 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-22
+
+### Added
+- Search: instant, case-insensitive search across every sealed file name, with filters for photos, videos, audio and documents. It runs inside the encrypted database on the phone, and characters like `%` and `_` are matched literally. Results open in the right viewer or player.
+- Albums: create albums with a name and colour, then rename or delete them (deleting an album never deletes its files). Each album card shows its newest photo or video as the cover, plus the item count and total size. Add or remove a photo or video from the viewer's new Album button, or create a new album right there.
+- Security screen, now fully working:
+  - Turn fingerprint unlock on (with a fingerprint check) or off.
+  - Set, change or remove the 6-digit PIN.
+  - Choose the auto-lock delay after leaving the app: instantly, 30 s, 1 min or 5 min. The vault still locks the moment the screen turns off.
+  - Change the passphrase. The current passphrase is required, and wrong guesses count toward the same lockout as unlocking. Files aren't re-encrypted, and the recovery key, PIN and fingerprint keep working.
+  - Lock now, a vault health score, and an About section describing the encryption.
+
+### Changed
+- The encrypted database moves to version 2 (adds albums). Existing vaults upgrade automatically on first unlock, with nothing lost.
+
+### Tests
+- 65 unit tests and 39 on-device tests, including upgrading a real version-1 database, passphrase change rules, album counts and covers, search escaping, and UI flows for search, albums and Security.
+
 ## [0.5.0] - 2026-10-22
 
 ### Added
@@ -111,7 +129,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/shahabcodes/Obscura/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/shahabcodes/Obscura/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/shahabcodes/Obscura/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/shahabcodes/Obscura/compare/v0.2.0...v0.3.0

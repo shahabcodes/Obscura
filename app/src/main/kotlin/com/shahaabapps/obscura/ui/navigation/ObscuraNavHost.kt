@@ -29,6 +29,12 @@ import com.shahaabapps.obscura.ui.gallery.GalleryViewModel
 import com.shahaabapps.obscura.ui.gallery.ReelScreen
 import com.shahaabapps.obscura.ui.gallery.ViewerScreen
 import com.shahaabapps.obscura.ui.importer.ImportScreen
+import com.shahaabapps.obscura.ui.organize.AlbumScreen
+import com.shahaabapps.obscura.ui.organize.AlbumsScreen
+import com.shahaabapps.obscura.ui.organize.SearchScreen
+import com.shahaabapps.obscura.ui.security.SecurityScreen
+import com.shahaabapps.obscura.vault.FileKind
+import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.ui.screens.HomeScreen
 import com.shahaabapps.obscura.ui.screens.HomeViewModel
 import com.shahaabapps.obscura.ui.screens.PlaceholderScreen
@@ -62,6 +68,7 @@ object Routes {
     const val REEL = "reel"
     const val VIDEO = "video"
     const val DOCUMENT = "document"
+    const val ALBUM = "album"
     const val VIDEOS = "videos"
     const val AUDIO = "audio"
     const val DOCS = "docs"
@@ -178,10 +185,23 @@ fun ObscuraNavHost(
                     navController.navigate(Routes.GALLERY) { popUpTo(Routes.VIDEOS) { inclusive = true } }
                 }
             }
-            placeholder(navController, Routes.SEARCH, "Search", 6, "Instant search over the encrypted index.", showBack = false)
+            composable(Routes.SEARCH) {
+                val gallery: GalleryViewModel = hiltViewModel()
+                SearchScreen(onOpen = { file -> navController.openFile(file, gallery) })
+            }
+            composable(Routes.ALBUMS) {
+                AlbumsScreen(onOpenAlbum = { id -> navController.navigate("${Routes.ALBUM}/$id") })
+            }
+            composable("${Routes.ALBUM}/{id}") { entry ->
+                val gallery: GalleryViewModel = hiltViewModel()
+                AlbumScreen(
+                    id = entry.arguments?.getString("id").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onOpenFile = { file -> navController.openFile(file, gallery) },
+                )
+            }
+            composable(Routes.SECURITY) { SecurityScreen() }
             composable(Routes.IMPORT) { ImportScreen() }
-            placeholder(navController, Routes.ALBUMS, "Albums", 6, "Albums, including ones behind an extra PIN.", showBack = false)
-            placeholder(navController, Routes.SECURITY, "Security", 8, "Auto-lock, panic lock, decoy vault and backups.", showBack = false)
         }
 
         if (current in Routes.tabs) {
@@ -261,6 +281,20 @@ private fun NavGraphBuilder.placeholder(
             description = description,
             onBack = if (showBack) ({ navController.popBackStack() }) else null,
         )
+    }
+}
+
+/** Opens a file in the right screen for its type (from search results or an album). */
+private fun NavHostController.openFile(file: VaultFile, gallery: GalleryViewModel) {
+    when (file.kind) {
+        FileKind.PHOTO -> {
+            // The viewer pages through the gallery list, so make sure it isn't filtered away.
+            gallery.update { it.copy(filter = GalleryFilter.ALL) }
+            navigate("${Routes.VIEWER}/${file.id}")
+        }
+        FileKind.VIDEO -> navigate("${Routes.VIDEO}/${file.id}")
+        FileKind.AUDIO -> navigate(Routes.AUDIO)
+        FileKind.DOCUMENT, FileKind.OTHER -> navigate("${Routes.DOCUMENT}/${file.id}")
     }
 }
 
