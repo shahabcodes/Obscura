@@ -99,7 +99,7 @@ fun UnlockScreen(
         Text("Enter your 6-digit PIN", style = PrismType.body, color = Prism.Muted)
         Spacer(Modifier.height(26.dp))
         if (state.lockedOut) {
-            LockoutBlock(state.lockoutMs)
+            LockoutBlock(state.lockoutMs, state.attemptsBeforeWipe)
         } else {
             PinDots(filled = state.pin.length, error = state.wrong)
             Spacer(Modifier.height(12.dp))
@@ -146,7 +146,7 @@ private fun PassphraseUnlockContent(
         Text("Enter your passphrase.", style = PrismType.title, color = Prism.Paper)
         Spacer(Modifier.height(24.dp))
         if (state.lockedOut) {
-            LockoutBlock(state.lockoutMs)
+            LockoutBlock(state.lockoutMs, state.attemptsBeforeWipe)
         } else {
             SecretField(
                 label = "Passphrase",
@@ -194,7 +194,7 @@ fun RecoveryUnlockScreen(
         )
         Spacer(Modifier.height(24.dp))
         if (state.lockedOut) {
-            LockoutBlock(state.lockoutMs)
+            LockoutBlock(state.lockoutMs, state.attemptsBeforeWipe)
         } else {
             SecretField(
                 label = "Recovery key",
@@ -246,7 +246,7 @@ private fun Message(text: String?) {
 
 /** The orange frozen-vault card with a live countdown. */
 @Composable
-fun LockoutBlock(remainingMs: Long) {
+fun LockoutBlock(remainingMs: Long, attemptsBeforeWipe: Int? = null) {
     val totalSeconds = (remainingMs + 999) / 1000
     val clock = "%02d:%02d".format(totalSeconds / 60, totalSeconds % 60)
     Column(
@@ -265,6 +265,14 @@ fun LockoutBlock(remainingMs: Long) {
             style = PrismType.body,
             color = Prism.Ink,
         )
+        if (attemptsBeforeWipe != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "$attemptsBeforeWipe more wrong ${if (attemptsBeforeWipe == 1) "attempt" else "attempts"} and the vault is erased for good.",
+                style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight),
+                color = Prism.Ink,
+            )
+        }
     }
 }
 

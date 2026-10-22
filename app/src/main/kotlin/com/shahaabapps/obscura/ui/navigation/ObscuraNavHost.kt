@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import com.shahaabapps.obscura.duplicates.DuplicatesScreen
 import com.shahaabapps.obscura.media.AudioScreen
 import com.shahaabapps.obscura.media.DocumentScreen
 import com.shahaabapps.obscura.media.DocumentsScreen
@@ -69,6 +70,7 @@ object Routes {
     const val VIDEO = "video"
     const val DOCUMENT = "document"
     const val ALBUM = "album"
+    const val DUPLICATES = "duplicates"
     const val VIDEOS = "videos"
     const val AUDIO = "audio"
     const val DOCS = "docs"
@@ -107,6 +109,10 @@ fun ObscuraNavHost(
         if (vaultState is VaultState.Locked && current != null && current !in Routes.lockedSafe) {
             navController.navigate(Routes.UNLOCK) { popUpTo(0) { inclusive = true } }
         }
+        // Wipe-after-10 destroyed the vault: start over from the welcome screen.
+        if (vaultState is VaultState.NoVault && current != null && current != Routes.WELCOME && !current.startsWith("setup") && current != Routes.RESTORE) {
+            navController.navigate(Routes.WELCOME) { popUpTo(0) { inclusive = true } }
+        }
     }
 
     Box(Modifier.fillMaxSize().background(Prism.Ink)) {
@@ -142,8 +148,10 @@ fun ObscuraNavHost(
                     onPlay = { id -> navController.navigate("${Routes.VIDEO}/$id") },
                     onReel = { id -> navController.navigate("${Routes.REEL}/$id") },
                     onImport = { navController.navigateToTab(Routes.IMPORT) },
+                    onDuplicates = { navController.navigate(Routes.DUPLICATES) },
                 )
             }
+            composable(Routes.DUPLICATES) { DuplicatesScreen(onBack = { navController.popBackStack() }) }
             composable("${Routes.VIEWER}/{id}") { entry ->
                 ViewerScreen(
                     viewModel = hiltViewModel(),

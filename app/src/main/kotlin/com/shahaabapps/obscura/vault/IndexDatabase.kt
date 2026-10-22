@@ -37,6 +37,8 @@ data class VaultFile(
     val durationMs: Long? = null,
     val favorite: Boolean = false,
     val albumId: String? = null,
+    /** 64-bit visual fingerprint (dHash) of photos, for finding look-alikes. Computed on demand. */
+    val phash: Long? = null,
 ) {
     override fun equals(other: Any?) = other is VaultFile && other.id == id && other.sha256 == sha256 && other.name == name &&
         other.favorite == favorite && other.albumId == albumId
@@ -129,6 +131,12 @@ interface FileDao {
     @Query("UPDATE files SET albumId = :albumId WHERE id = :id")
     suspend fun setAlbum(id: String, albumId: String?)
 
+    @Query("UPDATE files SET phash = :phash WHERE id = :id")
+    suspend fun setPhash(id: String, phash: Long)
+
+    @Query("SELECT * FROM files")
+    suspend fun all(): List<VaultFile>
+
     @Query("SELECT * FROM files WHERE albumId = :albumId ORDER BY takenAt DESC")
     fun observeInAlbum(albumId: String): Flow<List<VaultFile>>
 
@@ -146,9 +154,9 @@ fun likePattern(query: String): String =
 
 @Database(
     entities = [VaultFile::class, Album::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
-    autoMigrations = [androidx.room.AutoMigration(from = 1, to = 2)],
+    autoMigrations = [androidx.room.AutoMigration(from = 1, to = 2), androidx.room.AutoMigration(from = 2, to = 3)],
 )
 abstract class IndexDatabase : RoomDatabase() {
     abstract fun files(): FileDao

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -78,6 +79,7 @@ fun GalleryScreen(
     onPlay: (String) -> Unit,
     onReel: (String) -> Unit,
     onImport: () -> Unit,
+    onDuplicates: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -117,22 +119,12 @@ fun GalleryScreen(
                 }
             }
             if (state.flat.isNotEmpty()) {
-                Surface(
-                    onClick = { onReel(state.flat.first().id) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = Prism.Pink,
-                    contentColor = Prism.Ink,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                ) {
-                    Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(32.dp).clip(CircleShape).background(Prism.Ink), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Prism.Pink, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text("Reel mode", style = PrismType.heading)
-                            Text("SWIPE THROUGH FULL SCREEN", style = PrismType.label)
-                        }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ShortcutTile("Reel mode", "SWIPE THROUGH", Prism.Pink, Modifier.weight(1f), { onReel(state.flat.first().id) }) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Prism.Pink, modifier = Modifier.size(18.dp))
+                    }
+                    ShortcutTile("Duplicates", "FIND & FREE SPACE", Prism.Orange, Modifier.weight(1f), onDuplicates) {
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = Prism.Orange, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -204,6 +196,20 @@ fun GalleryScreen(
             containerColor = Prism.Surface,
         ) {
             SortSheet(settings, viewModel::update, onDone = { sheetOpen = false }, visible = state.flat.size)
+        }
+    }
+}
+
+@Composable
+private fun ShortcutTile(title: String, tag: String, color: Color, modifier: Modifier, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Surface(onClick = onClick, shape = RoundedCornerShape(20.dp), color = color, contentColor = Prism.Ink, modifier = modifier.height(56.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(Prism.Ink), contentAlignment = Alignment.Center) { icon() }
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(title, style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight))
+                Text(tag, style = PrismType.label.copy(fontSize = PrismType.label.fontSize * 0.85f))
+            }
         }
     }
 }

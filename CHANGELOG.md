@@ -8,6 +8,25 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-22
+
+### Added
+- Duplicate finder (Gallery → Duplicates):
+  - Finds exact copies of any file (same contents), look-alike photos (re-saved, resized or lightly edited, matched by a 64-bit visual fingerprint), and bursts (similar shots taken within 5 seconds).
+  - Suggests the copy to keep: the first one sealed for exact copies, otherwise the highest resolution. Every other copy is pre-marked, and you can change any mark.
+  - Shows the space you can free, filters by kind, and shreds only after you confirm.
+  - Fingerprints are computed from the encrypted thumbnails, stored in the encrypted index and reused on later scans.
+- Panic lock: lay the phone face-down and the vault locks instantly, even in the middle of an import. It only listens to the motion sensor while Obscura is on screen. It's on by default and can be switched off in Security.
+- Decoy vault: a second passphrase (and optional PIN) that opens a completely separate vault. Fill it with harmless files, and anyone made to watch you unlock sees a normal vault. Wrong guesses must miss both vaults to count. Fingerprint and recovery key always open the real vault. Inside the decoy, decoy and wipe settings are hidden. Set up and delete it from Security; its secrets must differ from the real ones.
+- Wipe after 10 wrong attempts (off by default, with a strong warning before turning it on): after 10 wrong passphrases or PINs in a row, both vaults and every key that could open them are destroyed and the app returns to the welcome screen. Error messages and the lockout card show how many attempts are left.
+
+### Changed
+- The encrypted database moves to version 3 (adds visual fingerprints). Existing vaults upgrade automatically on first unlock.
+- The Gallery header now has Reel mode and Duplicates side by side.
+
+### Tests
+- 77 unit tests and 49 on-device tests, including the decoy vault (separate files, PIN and passphrase routing, rules), wipe-after-10 with lockout waits, panic lock during an import, duplicate scanning of real JPEGs (exact copy, resized re-save, unrelated photo), and the duplicate finder UI flow.
+
 ## [0.6.0] - 2026-10-22
 
 ### Added
@@ -129,7 +148,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/shahabcodes/Obscura/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/shahabcodes/Obscura/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/shahabcodes/Obscura/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/shahabcodes/Obscura/compare/v0.3.0...v0.4.0

@@ -27,6 +27,8 @@ data class UnlockUiState(
     val wrong: Boolean = false,
     val lockoutMs: Long = 0,
     val biometricAvailable: Boolean = false,
+    /** Wrong attempts left before wipe-after-10 erases the vault, or null when that is off. */
+    val attemptsBeforeWipe: Int? = null,
 ) {
     val lockedOut get() = lockoutMs > 0
 }
@@ -100,7 +102,9 @@ class UnlockViewModel @Inject constructor(private val session: VaultSession) : V
                 is UnlockResult.Wrong -> _state.update {
                     it.copy(
                         wrong = true,
-                        message = when (result.freeAttemptsLeft) {
+                        message = result.attemptsBeforeWipe?.let { left ->
+                            "Wrong $what. $left more wrong ${if (left == 1) "attempt" else "attempts"} and the vault is erased."
+                        } ?: when (result.freeAttemptsLeft) {
                             0 -> "Wrong $what. The next mistake starts a 1-minute wait."
                             1 -> "Wrong $what. 1 more try before a wait."
                             else -> "Wrong $what. ${result.freeAttemptsLeft} more tries before a wait."
@@ -112,6 +116,8 @@ class UnlockViewModel @Inject constructor(private val session: VaultSession) : V
                     refreshLockout()
                 }
                 is UnlockResult.Failed -> _state.update { it.copy(message = result.message) }
+                // Navigation notices the vault is gone and returns to the welcome screen.
+                UnlockResult.Wiped -> Unit
             }
         }
     }
@@ -121,7 +127,7 @@ class UnlockViewModel @Inject constructor(private val session: VaultSession) : V
         ticker = viewModelScope.launch {
             while (isActive) {
                 val remaining = session.lockoutRemainingMs()
-                _state.update { it.copy(lockoutMs = remaining) }
+                _state.update { it.copy(lockoutMs = remaining, attemptsBeforeWipe = session.attemptsBeforeWipe()) }
                 if (remaining <= 0) break
                 delay(500)
             }

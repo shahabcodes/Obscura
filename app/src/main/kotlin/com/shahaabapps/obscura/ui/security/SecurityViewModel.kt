@@ -7,6 +7,8 @@ import com.shahaabapps.obscura.BuildConfig
 import com.shahaabapps.obscura.ui.components.canUseStrongBiometric
 import com.shahaabapps.obscura.ui.setup.PassphraseStrength
 import com.shahaabapps.obscura.vault.AutoLock
+import com.shahaabapps.obscura.vault.PanicLock
+import com.shahaabapps.obscura.vault.VaultSettings
 import com.shahaabapps.obscura.vault.UnlockResult
 import com.shahaabapps.obscura.vault.VaultSession
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,14 +26,21 @@ data class SecurityState(
     val fingerprintOn: Boolean = false,
     val pinOn: Boolean = false,
     val autoLockMs: Long = AutoLock.DEFAULT_DELAY_MS,
+    val panicAvailable: Boolean = false,
+    val panicLock: Boolean = true,
+    val wipeAfterTen: Boolean = false,
+    /** Inside the decoy vault, decoy and wipe settings are hidden so it looks like a normal vault. */
+    val isDecoy: Boolean = false,
+    val hasDecoy: Boolean = false,
     val message: String? = null,
     val version: String = BuildConfig.VERSION_NAME,
 ) {
     /** A rough 0–100 picture of how well the vault is protected, for the health card. */
     val score: Int
         get() {
-            var s = 70
+            var s = 65
             if (fingerprintOn || pinOn) s += 5
+            if (panicLock && panicAvailable) s += 5
             s += when {
                 autoLockMs == 0L -> 20
                 autoLockMs <= 30_000 -> 15
@@ -54,12 +63,30 @@ data class PassphraseChange(
     val canSubmit get() = current.isNotEmpty() && strength.score >= PassphraseStrength.MIN_SCORE && replacement == confirm && !busy
 }
 
+data class DecoySetup(
+    val passphrase: String = "",
+    val confirm: String = "",
+    val pin: String = "",
+    val busy: Boolean = false,
+    val error: String? = null,
+    val done: Boolean = false,
+) {
+    val strength get() = PassphraseStrength.evaluate(passphrase)
+    val pinValid get() = pin.isEmpty() || (pin.length == 6 && pin.all(Char::isDigit))
+    val canSubmit get() = strength.score >= 2 && passphrase == confirm && pinValid && !busy
+}
+
 @HiltViewModel
 class SecurityViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val session: VaultSession,
     private val autoLock: AutoLock,
+    private val settings: VaultSettings,
+    private val panic: PanicLock,
 ) : ViewModel() {
+
+    private val _decoy = MutableStateFlow(DecoySetup())
+    val decoy: StateFlow<DecoySetup> = _decoy.asStateFlow()
 
     private val _state = MutableStateFlow(load())
     val state: StateFlow<SecurityState> = _state.asStateFlow()
@@ -67,12 +94,56 @@ class SecurityViewModel @Inject constructor(
     private val _change = MutableStateFlow(PassphraseChange())
     val change: StateFlow<PassphraseChange> = _change.asStateFlow()
 
-    private fun load() = SecurityState(
-        fingerprintAvailable = canUseStrongBiometric(context),
-        fingerprintOn = session.isBiometricEnrolled(),
-        pinOn = session.hasPin(),
-        autoLockMs = autoLock.delayMs,
-    )
+    private fun load(): SecurityState {
+        val decoyOpen = session.openVault?.isDecoy == true
+        return SecurityState(
+            fingerprintAvailable = canUseStrongBiometric(context) && !decoyOpen,
+            fingerprintOn = session.isBiometricEnrolled(),
+            pinOn = session.hasPin(),
+            autoLockMs = autoLock.delayMs,
+            panicAvailable = panic.available,
+            panicLock = settings.panicLock,
+            wipeAfterTen = settings.wipeAfterTen,
+            isDecoy = decoyOpen,
+            hasDecoy = session.hasDecoy(),
+        )
+    }
+
+    fun setPanicLock(on: Boolean) {
+        settings.panicLock = on
+        panic.refresh()
+        refresh()
+    }
+
+    fun setWipeAfterTen(on: Boolean) {
+        settings.wipeAfterTen = on
+        _state.update { load().copy(message = if (on) "Wipe after 10 wrong attempts is on." else "Wipe after 10 wrong attempts is off.") }
+    }
+
+    fun onDecoyPassphrase(v: String) = _decoy.update { it.copy(passphrase = v, error = null) }
+    fun onDecoyConfirm(v: String) = _decoy.update { it.copy(confirm = v, error = null) }
+    fun onDecoyPin(v: String) = _decoy.update { it.copy(pin = v.filter(Char::isDigit).take(6), error = null) }
+    fun resetDecoy() { _decoy.value = DecoySetup() }
+
+    fun createDecoy() {
+        val d = _decoy.value
+        if (!d.canSubmit) return
+        _decoy.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            val result = session.createDecoy(d.passphrase.toCharArray(), d.pin.takeIf { it.isNotEmpty() }?.toCharArray())
+            if (result == UnlockResult.Success) {
+                _decoy.value = DecoySetup(done = true)
+                _state.update { load().copy(message = "Decoy vault ready. Lock, then unlock with the decoy passphrase or PIN to fill it with harmless files.") }
+            } else {
+                _decoy.update { it.copy(busy = false, error = (result as? UnlockResult.Failed)?.message ?: "Couldn't create the decoy vault.") }
+            }
+        }
+    }
+
+    fun removeDecoy() {
+        session.removeDecoy()
+        _state.update { load().copy(message = "Decoy vault deleted.") }
+    }
 
     fun refresh() = _state.update { load().copy(message = it.message) }
 
@@ -127,6 +198,7 @@ class SecurityViewModel @Inject constructor(
                     is UnlockResult.Wrong -> it.copy(busy = false, current = "", error = "Current passphrase is wrong. ${result.freeAttemptsLeft} tries before a wait.")
                     is UnlockResult.LockedOut -> it.copy(busy = false, current = "", error = "Too many wrong attempts. Try again in ${(result.remainingMs + 59_999) / 60_000} min.")
                     is UnlockResult.Failed -> it.copy(busy = false, error = result.message)
+                    UnlockResult.Wiped -> PassphraseChange()
                 }
             }
             if (result == UnlockResult.Success) _state.update { it.copy(message = "Passphrase changed. Your recovery key still works.") }

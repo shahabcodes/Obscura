@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -123,7 +124,8 @@ class OrganizeFlowTest {
 
         // Open the sheet with the section's button, then submit with the sheet's button.
         val changeButton = hasText("Change passphrase") and hasClickAction()
-        compose.onNode(changeButton).performScrollTo().performClick()
+        // Invoke the click action directly: on a long page the button can sit under the floating bar.
+        compose.onNode(changeButton).performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.waitUntilAtLeastOneExists(hasContentDescription("Current passphrase"), 5_000)
         compose.onNodeWithContentDescription("Current passphrase").performTextInput(passphrase)
         compose.onNodeWithContentDescription("New passphrase").performTextInput("quartz tundra violet piano saffron")
