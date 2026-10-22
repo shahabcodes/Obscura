@@ -64,6 +64,7 @@ import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
+import com.shahaabapps.obscura.vault.FileKind
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,6 +75,7 @@ fun GalleryScreen(
     viewModel: GalleryViewModel,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
+    onPlay: (String) -> Unit,
     onReel: (String) -> Unit,
     onImport: () -> Unit,
 ) {
@@ -183,7 +185,9 @@ fun GalleryScreen(
                                     .aspectRatio(1f)
                                     .animateItem()
                                     .semantics { contentDescription = "${GalleryLogic.typeLabel(entry.file)}, ${entry.file.name}" + if (entry.file.favorite) ", favourite" else "" }
-                                    .clickable(role = Role.Button, onClickLabel = "Open") { onOpen(entry.file.id) },
+                                    .clickable(role = Role.Button, onClickLabel = if (entry.file.kind == FileKind.VIDEO) "Play" else "Open") {
+                                        if (entry.file.kind == FileKind.VIDEO) onPlay(entry.file.id) else onOpen(entry.file.id)
+                                    },
                             )
                         }
                     }

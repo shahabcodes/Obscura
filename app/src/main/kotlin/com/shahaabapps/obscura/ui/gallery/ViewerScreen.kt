@@ -70,7 +70,7 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Unit, onReel: (String) -> Unit) {
+fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Unit, onReel: (String) -> Unit, onPlay: (String) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     if (state.loading) {
         Box(Modifier.fillMaxSize().background(Prism.Ink))
@@ -91,7 +91,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
 
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
         HorizontalPager(state = pager, key = { files[it].id }, userScrollEnabled = !zoomed, beyondViewportPageCount = 1) { page ->
-            ZoomableMedia(files[page], viewModel, onZoomChanged = { if (page == pager.currentPage) zoomed = it })
+            ZoomableMedia(files[page], viewModel, onZoomChanged = { if (page == pager.currentPage) zoomed = it }, onPlay = { onPlay(files[page].id) })
         }
 
         Column(Modifier.fillMaxWidth().safeDrawingPadding().padding(12.dp)) {
@@ -156,7 +156,7 @@ fun ShredDialog(file: VaultFile, onDismiss: () -> Unit, onConfirm: () -> Unit) {
 }
 
 @Composable
-private fun ZoomableMedia(file: VaultFile, viewModel: GalleryViewModel, onZoomChanged: (Boolean) -> Unit) {
+private fun ZoomableMedia(file: VaultFile, viewModel: GalleryViewModel, onZoomChanged: (Boolean) -> Unit, onPlay: () -> Unit) {
     val maxSide = with(LocalDensity.current) {
         val config = LocalConfiguration.current
         (maxOf(config.screenWidthDp, config.screenHeightDp).dp.toPx() * 1.5f).toInt().coerceAtMost(4096)
@@ -216,17 +216,13 @@ private fun ZoomableMedia(file: VaultFile, viewModel: GalleryViewModel, onZoomCh
             CircularProgressIndicator(color = Prism.Sun, strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
         }
         if (file.kind == FileKind.VIDEO) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(72.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Prism.Paper, modifier = Modifier.size(36.dp))
+            Box(
+                Modifier.size(80.dp).clip(CircleShape).background(Prism.Sun),
+                contentAlignment = Alignment.Center,
+            ) {
+                IconButton(onClick = onPlay, modifier = Modifier.size(80.dp)) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Play video", tint = Prism.Ink, modifier = Modifier.size(40.dp))
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Video playback is coming in the next update",
-                    style = PrismType.label,
-                    color = Prism.Paper,
-                    modifier = Modifier.clip(CircleShape).background(Prism.Ink.copy(alpha = 0.7f)).padding(horizontal = 12.dp, vertical = 6.dp),
-                )
             }
         }
     }

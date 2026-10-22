@@ -19,6 +19,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import com.shahaabapps.obscura.media.AudioScreen
+import com.shahaabapps.obscura.media.DocumentScreen
+import com.shahaabapps.obscura.media.DocumentsScreen
+import com.shahaabapps.obscura.media.VideoPlayerScreen
 import com.shahaabapps.obscura.ui.gallery.GalleryFilter
 import com.shahaabapps.obscura.ui.gallery.GalleryScreen
 import com.shahaabapps.obscura.ui.gallery.GalleryViewModel
@@ -56,6 +60,8 @@ object Routes {
     const val GALLERY = "gallery"
     const val VIEWER = "viewer"
     const val REEL = "reel"
+    const val VIDEO = "video"
+    const val DOCUMENT = "document"
     const val VIDEOS = "videos"
     const val AUDIO = "audio"
     const val DOCS = "docs"
@@ -126,6 +132,7 @@ fun ObscuraNavHost(
                     viewModel = hiltViewModel(),
                     onBack = { navController.popBackStack() },
                     onOpen = { id -> navController.navigate("${Routes.VIEWER}/$id") },
+                    onPlay = { id -> navController.navigate("${Routes.VIDEO}/$id") },
                     onReel = { id -> navController.navigate("${Routes.REEL}/$id") },
                     onImport = { navController.navigateToTab(Routes.IMPORT) },
                 )
@@ -136,7 +143,25 @@ fun ObscuraNavHost(
                     startId = entry.arguments?.getString("id").orEmpty(),
                     onBack = { navController.popBackStack() },
                     onReel = { id -> navController.navigate("${Routes.REEL}/$id") },
+                    onPlay = { id -> navController.navigate("${Routes.VIDEO}/$id") },
                 )
+            }
+            composable("${Routes.VIDEO}/{id}") { entry ->
+                VideoPlayerScreen(hiltViewModel(), entry.arguments?.getString("id").orEmpty(), onBack = { navController.popBackStack() })
+            }
+            composable(Routes.AUDIO) {
+                AudioScreen(hiltViewModel(), onBack = { navController.popBackStack() }, onImport = { navController.navigateToTab(Routes.IMPORT) })
+            }
+            composable(Routes.DOCS) {
+                DocumentsScreen(
+                    hiltViewModel(),
+                    onBack = { navController.popBackStack() },
+                    onOpen = { id -> navController.navigate("${Routes.DOCUMENT}/$id") },
+                    onImport = { navController.navigateToTab(Routes.IMPORT) },
+                )
+            }
+            composable("${Routes.DOCUMENT}/{id}") { entry ->
+                DocumentScreen(hiltViewModel(), entry.arguments?.getString("id").orEmpty(), onBack = { navController.popBackStack() })
             }
             composable("${Routes.REEL}/{id}") { entry ->
                 ReelScreen(
@@ -153,8 +178,6 @@ fun ObscuraNavHost(
                     navController.navigate(Routes.GALLERY) { popUpTo(Routes.VIDEOS) { inclusive = true } }
                 }
             }
-            placeholder(navController, Routes.AUDIO, "Audio", 5, "Waveform player and queue.")
-            placeholder(navController, Routes.DOCS, "Documents", 5, "PDFs and documents rendered in memory.")
             placeholder(navController, Routes.SEARCH, "Search", 6, "Instant search over the encrypted index.", showBack = false)
             composable(Routes.IMPORT) { ImportScreen() }
             placeholder(navController, Routes.ALBUMS, "Albums", 6, "Albums, including ones behind an extra PIN.", showBack = false)

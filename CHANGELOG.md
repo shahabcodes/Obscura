@@ -8,6 +8,24 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
+### Added
+- Video player: plays sealed videos straight from the vault through a decrypting data source. Seeking decrypts only the 1 MiB segments needed, in memory. Includes play/pause, a seek bar, ±10 seconds, speeds from 0.5× to 2×, and an "Up next" list. The video surface is marked secure, so frames can't be captured.
+- Audio player: every sealed audio file in one queue, with cover art when the file has it, a seek bar, previous/next, repeat-one and speed.
+- Pressing Play after a track or video has finished starts it again from the beginning.
+- Documents: list sortable by date, name or size, with coloured type badges.
+- PDF viewer: the PDF is decrypted into an anonymous in-memory file (never to storage) and pages are rendered as you scroll. Needs Android 11 or newer; on Android 10 the file stays sealed with a short explanation.
+- Text viewer for .txt, .md, .csv, .json, .log, .xml and .yaml files (first 512 KB, selectable).
+- Shred from the document viewer.
+- Tapping a video in the gallery or the photo viewer opens the player. Home's Audio and Documents tiles now open their screens.
+
+### Changed
+- Playback pauses whenever the app leaves the screen and the player is released on lock, so media never keeps a vault open in the background.
+
+### Tests
+- 61 unit tests and 31 on-device tests, including playback of a sealed H.264 video (with seeking), a sealed WAV, Play restarting a finished track, rendering every page of a sealed PDF, and ranged reads through the decrypting data source.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added
@@ -93,7 +111,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/shahabcodes/Obscura/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/shahabcodes/Obscura/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/shahabcodes/Obscura/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shahabcodes/Obscura/compare/v0.1.0...v0.2.0
