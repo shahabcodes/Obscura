@@ -24,6 +24,8 @@ import com.shahaabapps.obscura.media.AudioScreen
 import com.shahaabapps.obscura.media.DocumentScreen
 import com.shahaabapps.obscura.media.DocumentsScreen
 import com.shahaabapps.obscura.media.VideoPlayerScreen
+import com.shahaabapps.obscura.ui.backup.BackupScreen
+import com.shahaabapps.obscura.ui.backup.RestoreScreen
 import com.shahaabapps.obscura.ui.gallery.GalleryFilter
 import com.shahaabapps.obscura.ui.gallery.GalleryScreen
 import com.shahaabapps.obscura.ui.gallery.GalleryViewModel
@@ -38,7 +40,6 @@ import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.ui.screens.HomeScreen
 import com.shahaabapps.obscura.ui.screens.HomeViewModel
-import com.shahaabapps.obscura.ui.screens.PlaceholderScreen
 import com.shahaabapps.obscura.ui.screens.WelcomeScreen
 import com.shahaabapps.obscura.ui.setup.BiometricSetupScreen
 import com.shahaabapps.obscura.ui.setup.PassphraseSetupScreen
@@ -78,6 +79,7 @@ object Routes {
     const val IMPORT = "import"
     const val ALBUMS = "albums"
     const val SECURITY = "security"
+    const val BACKUP = "backup"
 
     /** Destinations that show the floating bottom bar. */
     val tabs = setOf(HOME, SEARCH, IMPORT, ALBUMS, SECURITY)
@@ -139,7 +141,13 @@ fun ObscuraNavHost(
                     },
                 )
             }
-            placeholder(navController, Routes.RESTORE, "Restore", 9, "Bring a vault back from an encrypted USB backup.")
+            composable(Routes.RESTORE) {
+                RestoreScreen(
+                    onBack = { navController.popBackStack() },
+                    onRestored = { navController.navigate(Routes.UNLOCK) { popUpTo(0) { inclusive = true } } },
+                )
+            }
+            composable(Routes.BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.GALLERY) {
                 GalleryScreen(
                     viewModel = hiltViewModel(),
@@ -208,7 +216,7 @@ fun ObscuraNavHost(
                     onOpenFile = { file -> navController.openFile(file, gallery) },
                 )
             }
-            composable(Routes.SECURITY) { SecurityScreen() }
+            composable(Routes.SECURITY) { SecurityScreen(onBackup = { navController.navigate(Routes.BACKUP) }) }
             composable(Routes.IMPORT) { ImportScreen() }
         }
 
@@ -271,24 +279,6 @@ private fun NavGraphBuilder.unlockScreens(navController: NavHostController) {
     }
     composable(Routes.UNLOCK_RECOVERY) {
         RecoveryUnlockScreen(onUnlocked = toHome, onBack = { navController.popBackStack() })
-    }
-}
-
-private fun NavGraphBuilder.placeholder(
-    navController: NavHostController,
-    route: String,
-    title: String,
-    phase: Int,
-    description: String,
-    showBack: Boolean = true,
-) {
-    composable(route) {
-        PlaceholderScreen(
-            title = title,
-            phase = phase,
-            description = description,
-            onBack = if (showBack) ({ navController.popBackStack() }) else null,
-        )
     }
 }
 

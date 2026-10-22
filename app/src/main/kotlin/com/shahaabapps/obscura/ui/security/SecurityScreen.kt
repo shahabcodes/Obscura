@@ -64,7 +64,7 @@ import com.shahaabapps.obscura.ui.theme.PrismType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SecurityScreen(viewModel: SecurityViewModel = hiltViewModel()) {
+fun SecurityScreen(onBackup: () -> Unit = {}, viewModel: SecurityViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var changingPassphrase by remember { mutableStateOf(false) }
@@ -186,6 +186,17 @@ fun SecurityScreen(viewModel: SecurityViewModel = hiltViewModel()) {
                     })
                 }
             }
+        }
+
+        Section("BACKUP") {
+            Text("Encrypted backup", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper)
+            Text(
+                "Last backup: " + (state.lastBackupAt?.let { android.text.format.DateUtils.getRelativeTimeSpanString(it).toString() } ?: "never"),
+                style = PrismType.label,
+                color = if (state.lastBackupAt == null) Prism.Orange else Prism.Muted,
+            )
+            Spacer(Modifier.height(10.dp))
+            GhostButton("Back up to a USB drive or folder", onClick = onBackup)
         }
 
         Section("PASSPHRASE") {

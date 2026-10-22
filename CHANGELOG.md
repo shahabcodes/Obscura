@@ -8,6 +8,23 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-23
+
+### Added
+- Encrypted backup (Security → Backup) to a USB drive or any folder you pick with Android's own picker:
+  - Copies the vault exactly as it is stored: every file, thumbnail and the index, all still encrypted. Nothing is decrypted on the way, so a backup can only be opened with your passphrase or recovery key, and no file name or content appears on the drive in readable form.
+  - The first backup copies everything. Later backups copy only new files and remove shredded ones from the drive.
+  - Every backup is checked when it finishes: each sealed file must be on the drive at the right size. A backup that was interrupted is marked as unfinished and can't be restored by mistake; running it again completes it.
+  - The chosen drive or folder is remembered, and Security shows when you last backed up.
+  - Progress card and a notification that never shows file names. The vault stays open until the copy finishes, then locks. A backup can't start while an import is running.
+  - If the folder already holds a backup of a different vault, Obscura asks before replacing it.
+  - Inside the decoy vault, the decoy is what gets backed up, with its own remembered location.
+- Restore (Welcome → Restore from a backup drive): pick the drive or its "Obscura Backup" folder, and the encrypted vault is copied back onto the phone, then you unlock it with your passphrase or recovery key. Restoring is only offered when there is no vault on the phone, so it can never overwrite one. A failed restore leaves nothing behind.
+- PIN and fingerprint unlock are not part of a backup, because they only work on the phone that set them up. Set them up again after restoring.
+
+### Tests
+- 85 unit tests and 55 on-device tests, including backing up a real vault, wiping it, restoring and unlocking it with every file and thumbnail intact, incremental updates, a check that nothing readable reaches the drive, interrupted backups, the replace-another-vault prompt, and the Backup and Restore screens.
+
 ## [0.7.0] - 2026-10-22
 
 ### Added
@@ -148,7 +165,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/shahabcodes/Obscura/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/shahabcodes/Obscura/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/shahabcodes/Obscura/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/shahabcodes/Obscura/compare/v0.4.0...v0.5.0

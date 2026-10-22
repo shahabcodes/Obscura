@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shahaabapps.obscura.BuildConfig
+import com.shahaabapps.obscura.backup.BackupManager
 import com.shahaabapps.obscura.ui.components.canUseStrongBiometric
 import com.shahaabapps.obscura.ui.setup.PassphraseStrength
 import com.shahaabapps.obscura.vault.AutoLock
@@ -32,6 +33,7 @@ data class SecurityState(
     /** Inside the decoy vault, decoy and wipe settings are hidden so it looks like a normal vault. */
     val isDecoy: Boolean = false,
     val hasDecoy: Boolean = false,
+    val lastBackupAt: Long? = null,
     val message: String? = null,
     val version: String = BuildConfig.VERSION_NAME,
 ) {
@@ -83,6 +85,7 @@ class SecurityViewModel @Inject constructor(
     private val autoLock: AutoLock,
     private val settings: VaultSettings,
     private val panic: PanicLock,
+    private val backups: BackupManager,
 ) : ViewModel() {
 
     private val _decoy = MutableStateFlow(DecoySetup())
@@ -106,6 +109,7 @@ class SecurityViewModel @Inject constructor(
             wipeAfterTen = settings.wipeAfterTen,
             isDecoy = decoyOpen,
             hasDecoy = session.hasDecoy(),
+            lastBackupAt = backups.lastBackupAt(),
         )
     }
 

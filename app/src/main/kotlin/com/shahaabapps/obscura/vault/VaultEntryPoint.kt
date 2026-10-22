@@ -14,4 +14,5 @@ interface VaultEntryPoint {
     fun importManager(): com.shahaabapps.obscura.importer.ImportManager
     fun panicLock(): PanicLock
     fun settings(): VaultSettings
+    fun backupManager(): com.shahaabapps.obscura.backup.BackupManager
 }

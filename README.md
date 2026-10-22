@@ -5,6 +5,7 @@ An offline, encrypted vault for photos, videos, audio and documents on Android.
 - **No network access.** The app has no `INTERNET` permission; every build fails if one sneaks in.
 - **Encrypted on the device.** Files are sealed with AES-256-GCM streaming encryption before they are stored.
 - **Invisible to other apps.** Files live in app-private storage and are decrypted in memory only.
+- **Encrypted backups.** The vault can be copied, still encrypted, to a USB drive or folder and restored on a new phone with the passphrase or recovery key.
 
 ## Build
 
