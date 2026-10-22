@@ -102,6 +102,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

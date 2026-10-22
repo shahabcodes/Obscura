@@ -8,6 +8,25 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
+### Added
+- Import screen with three sources, all through Android's own picker (no storage permission needed):
+  - Photos & videos.
+  - Any files (documents, audio, archives…).
+  - A whole folder or USB drive, including every subfolder.
+- Background import with a live progress card (percent, files, bytes) and a progress notification. The notification never shows file names and is hidden on the lock screen.
+- The vault stays open while an import runs, even if you leave the app or the screen turns off, and locks as soon as the import finishes. A Cancel button is on the screen and in the notification.
+- The vault also stays open while you browse the system file picker, so taking longer than the 30-second auto-lock to find a folder no longer cancels the import.
+- Skip duplicates (on by default): files whose contents are already in the vault are not sealed again.
+- Remove location from photos (on by default): GPS data is stripped from JPEG photos while they stream into the vault, and XMP metadata (which can repeat the location) is dropped. Date taken, camera and orientation are kept. Nothing is written to disk unencrypted.
+- Date taken, dimensions and duration are read from EXIF and video metadata, so the gallery can group by month.
+- After an import, "Remove originals" deletes the imported files from their original location after you confirm. Files whose location doesn't allow deleting are reported.
+- Tests: 52 unit tests (including the location scrubber) and 17 on-device tests (real EXIF GPS removal, duplicates, cancelling, the vault staying open during import).
+
+### Changed
+- Auto-lock can be held open by long-running work and locks right after it ends.
+
 ## [0.2.0] - 2026-10-22
 
 ### Added
@@ -51,6 +70,7 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/shahabcodes/Obscura/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shahabcodes/Obscura/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shahabcodes/Obscura/releases/tag/v0.1.0

@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import com.shahaabapps.obscura.ui.importer.ImportScreen
 import com.shahaabapps.obscura.ui.screens.HomeScreen
 import com.shahaabapps.obscura.ui.screens.HomeViewModel
 import com.shahaabapps.obscura.ui.screens.PlaceholderScreen
@@ -113,7 +114,7 @@ fun ObscuraNavHost(
             placeholder(navController, Routes.AUDIO, "Audio", 5, "Waveform player and queue.")
             placeholder(navController, Routes.DOCS, "Documents", 5, "PDFs and documents rendered in memory.")
             placeholder(navController, Routes.SEARCH, "Search", 6, "Instant search over the encrypted index.", showBack = false)
-            placeholder(navController, Routes.IMPORT, "Import", 4, "Pick files, encrypt them, remove the originals.", showBack = false)
+            composable(Routes.IMPORT) { ImportScreen() }
             placeholder(navController, Routes.ALBUMS, "Albums", 6, "Albums, including ones behind an extra PIN.", showBack = false)
             placeholder(navController, Routes.SECURITY, "Security", 8, "Auto-lock, panic lock, decoy vault and backups.", showBack = false)
         }

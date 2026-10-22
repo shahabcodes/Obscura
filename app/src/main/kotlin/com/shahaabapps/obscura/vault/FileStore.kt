@@ -28,7 +28,15 @@ class FileStore(
     private val dao: FileDao,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun put(source: InputStream, info: IncomingFile): VaultFile {
+    suspend fun put(source: InputStream, info: IncomingFile): VaultFile =
+        checkNotNull(put(source, info, skipIfDuplicate = false))
+
+    /**
+     * Seals [source] and returns the new index row, or null when [skipIfDuplicate] is set and a
+     * file with identical contents is already in the vault. The fingerprint is taken while
+     * encrypting, so each file is read only once.
+     */
+    suspend fun put(source: InputStream, info: IncomingFile, skipIfDuplicate: Boolean): VaultFile? {
         val id = newId()
         val wrappedKey = cipher.newWrappedFileKey(id)
         store.tempDir.mkdirs()
@@ -49,6 +57,8 @@ class FileStore(
                     }
                 }
             }
+            val hash = digest.digest().toHex()
+            if (skipIfDuplicate && dao.countWithHash(hash) > 0) return null
             val file = VaultFile(
                 id = id,
                 name = info.name,
@@ -58,7 +68,7 @@ class FileStore(
                 takenAt = info.takenAt,
                 sealedAt = clock(),
                 wrappedKey = wrappedKey,
-                sha256 = digest.digest().toHex(),
+                sha256 = hash,
                 width = info.width,
                 height = info.height,
                 durationMs = info.durationMs,

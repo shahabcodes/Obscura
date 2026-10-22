@@ -11,4 +11,5 @@ interface VaultEntryPoint {
     fun session(): VaultSession
     fun store(): VaultStore
     fun autoLock(): AutoLock
+    fun importManager(): com.shahaabapps.obscura.importer.ImportManager
 }
