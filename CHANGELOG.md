@@ -8,7 +8,7 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-21
+## [0.1.0] - 2026-10-22
 
 ### Added
 - Project skeleton: Kotlin, Jetpack Compose, Material 3, Hilt, Navigation Compose, minSdk 29, targetSdk 35.
