@@ -32,8 +32,8 @@ interface BackupDir {
     fun child(name: String): BackupNode? = list().firstOrNull { it.name == name }
     /** Returns the sub-folder, creating it if needed. */
     fun directory(name: String): BackupDir
-    /** Creates or overwrites a file. */
-    fun write(name: String): OutputStream
+    /** Creates or overwrites a file; [mimeType] helps other apps recognise it. */
+    fun write(name: String, mimeType: String = "application/octet-stream"): OutputStream
     fun delete(name: String)
     /** Free space at the destination, or null when it can't be told. */
     fun availableBytes(): Long? = null
@@ -61,7 +61,7 @@ class FileBackupDir(private val dir: File) : BackupDir {
 
     override fun directory(name: String): BackupDir = FileBackupDir(File(dir, name))
 
-    override fun write(name: String): OutputStream = File(dir, name).outputStream()
+    override fun write(name: String, mimeType: String): OutputStream = File(dir, name).outputStream()
 
     override fun delete(name: String) {
         File(dir, name).deleteRecursively()
@@ -109,10 +109,10 @@ class SafBackupDir(
         return SafBackupDir(context, treeUri, DocumentsContract.getDocumentId(created), name)
     }
 
-    override fun write(name: String): OutputStream {
+    override fun write(name: String, mimeType: String): OutputStream {
         val existing = child(name) as? Node
         val uri = existing?.uri
-            ?: DocumentsContract.createDocument(resolver, parentUri, "application/octet-stream", name)
+            ?: DocumentsContract.createDocument(resolver, parentUri, mimeType, name)
             ?: throw FileNotFoundException("Could not create $name")
         // "wt" truncates an existing file so a shorter rewrite leaves no stale tail.
         return resolver.openOutputStream(uri, "wt") ?: throw FileNotFoundException(name)

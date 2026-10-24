@@ -1,6 +1,7 @@
 package com.shahaabapps.obscura.backup
 
 import com.shahaabapps.obscura.crypto.CorruptVaultException
+import java.io.File
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,7 +9,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import java.io.File
 
 /** File-level behaviour on plain folders; the on-device test covers real vaults end to end. */
 class BackupEngineTest {
@@ -134,9 +134,9 @@ class BackupEngineTest {
                 override fun asDirectory(): BackupDir = TestDrive(node.asDirectory(), free, beforeWrite)
             }
         }
-        override fun write(name: String): java.io.OutputStream {
+        override fun write(name: String, mimeType: String): java.io.OutputStream {
             beforeWrite(name)
-            return inner.write(name)
+            return inner.write(name, mimeType)
         }
         override fun availableBytes(): Long? = free
     }

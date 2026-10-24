@@ -238,16 +238,19 @@ fun AlbumScreen(id: String, onBack: () -> Unit, onOpenFile: (VaultFile) -> Unit,
     }
 }
 
-/** Bottom-sheet content: put one file into an album (or take it out), or create a new album for it. */
+/**
+ * Bottom-sheet content: put files into an album (or take them out), or create a new album for
+ * them. [currentAlbumId] is the album they all share, if any.
+ */
 @Composable
-fun AlbumPicker(fileId: String, currentAlbumId: String?, onDone: () -> Unit, viewModel: AlbumsViewModel = hiltViewModel()) {
+fun AlbumPicker(fileIds: List<String>, currentAlbumId: String?, onDone: () -> Unit, viewModel: AlbumsViewModel = hiltViewModel()) {
     val albums by viewModel.albums.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Add to album", style = PrismType.heading, color = Prism.Paper)
+        Text(if (fileIds.size == 1) "Add to album" else "Add %,d files to album".format(fileIds.size), style = PrismType.heading, color = Prism.Paper)
         if (creating) {
             AlbumEditor("", AlbumsViewModel.COLORS[0], "Create & add") { name, color ->
-                viewModel.create(name, color, thenAdd = fileId)
+                viewModel.create(name, color, thenAdd = fileIds)
                 onDone()
             }
         } else {
@@ -259,7 +262,7 @@ fun AlbumPicker(fileId: String, currentAlbumId: String?, onDone: () -> Unit, vie
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                         .clickable(role = Role.Button) {
-                            viewModel.moveTo(fileId, if (inIt) null else album.id)
+                            viewModel.moveTo(fileIds, if (inIt) null else album.id)
                             onDone()
                         }
                         .padding(vertical = 12.dp, horizontal = 8.dp),

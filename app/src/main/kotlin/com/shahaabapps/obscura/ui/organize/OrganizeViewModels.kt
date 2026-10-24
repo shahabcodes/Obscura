@@ -12,6 +12,7 @@ import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
 import com.shahaabapps.obscura.vault.likePattern
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 enum class SearchKind(val label: String, val kinds: Set<FileKind>?) {
     ALL("All", null),
@@ -73,12 +73,12 @@ class AlbumsViewModel @Inject constructor(private val session: VaultSession) : V
 
     suspend fun thumbnail(file: VaultFile): Bitmap? = session.openVault?.thumbnails?.thumbnail(file)
 
-    fun create(name: String, color: Long, thenAdd: String? = null) {
+    fun create(name: String, color: Long, thenAdd: List<String> = emptyList()) {
         viewModelScope.launch {
             val db = session.openVault?.database ?: return@launch
             val album = Album(FileStore.newId(), name.trim().ifEmpty { "Untitled album" }, color, System.currentTimeMillis())
             db.albums().insert(album)
-            thenAdd?.let { db.files().setAlbum(it, album.id) }
+            thenAdd.forEach { db.files().setAlbum(it, album.id) }
         }
     }
 
@@ -90,8 +90,11 @@ class AlbumsViewModel @Inject constructor(private val session: VaultSession) : V
         viewModelScope.launch { session.openVault?.database?.albums()?.delete(id) }
     }
 
-    fun moveTo(fileId: String, albumId: String?) {
-        viewModelScope.launch { session.openVault?.database?.files()?.setAlbum(fileId, albumId) }
+    fun moveTo(fileIds: List<String>, albumId: String?) {
+        viewModelScope.launch {
+            val dao = session.openVault?.database?.files() ?: return@launch
+            fileIds.chunked(com.shahaabapps.obscura.vault.BULK_CHUNK).forEach { dao.setAlbumAll(it, albumId) }
+        }
     }
 
     companion object {

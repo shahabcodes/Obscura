@@ -12,9 +12,9 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import java.io.File
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
-import java.io.File
 
 enum class FileKind { PHOTO, VIDEO, AUDIO, DOCUMENT, OTHER }
 
@@ -131,6 +131,13 @@ interface FileDao {
     @Query("UPDATE files SET albumId = :albumId WHERE id = :id")
     suspend fun setAlbum(id: String, albumId: String?)
 
+    /** Bulk versions for multi-select; callers pass at most [BULK_CHUNK] ids at a time. */
+    @Query("UPDATE files SET favorite = :favorite WHERE id IN (:ids)")
+    suspend fun setFavoriteAll(ids: List<String>, favorite: Boolean)
+
+    @Query("UPDATE files SET albumId = :albumId WHERE id IN (:ids)")
+    suspend fun setAlbumAll(ids: List<String>, albumId: String?)
+
     @Query("UPDATE files SET phash = :phash WHERE id = :id")
     suspend fun setPhash(id: String, phash: Long)
 
@@ -180,3 +187,6 @@ abstract class IndexDatabase : RoomDatabase() {
         }
     }
 }
+
+/** SQLite caps the number of bound parameters; bulk updates go in chunks of this size. */
+const val BULK_CHUNK = 500

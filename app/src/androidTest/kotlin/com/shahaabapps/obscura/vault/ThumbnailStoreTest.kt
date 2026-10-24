@@ -9,6 +9,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.shahaabapps.obscura.crypto.KdfParams
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.crypto.KeystoreGate
+import java.io.File
+import kotlin.random.Random
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -20,8 +22,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import kotlin.random.Random
 
 @RunWith(AndroidJUnit4::class)
 class ThumbnailStoreTest {
@@ -121,6 +121,8 @@ class ThumbnailStoreTest {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         fun shell(cmd: String): ByteArray =
             android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(cmd)).use { it.readBytes() }
+        // The recorder produces nothing while the screen is off, which happens late in long runs.
+        shell("input keyevent KEYCODE_WAKEUP")
         shell("screenrecord --time-limit 2 --size 320x640 /data/local/tmp/obscura-test.mp4")
         return shell("cat /data/local/tmp/obscura-test.mp4").also { shell("rm /data/local/tmp/obscura-test.mp4") }
     }

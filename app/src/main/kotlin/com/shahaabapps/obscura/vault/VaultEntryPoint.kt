@@ -15,4 +15,7 @@ interface VaultEntryPoint {
     fun panicLock(): PanicLock
     fun settings(): VaultSettings
     fun backupManager(): com.shahaabapps.obscura.backup.BackupManager
+    fun exportManager(): com.shahaabapps.obscura.export.ExportManager
+    fun shareGrants(): com.shahaabapps.obscura.export.ShareGrants
+    fun gallerySettings(): com.shahaabapps.obscura.ui.gallery.GallerySettingsStore
 }

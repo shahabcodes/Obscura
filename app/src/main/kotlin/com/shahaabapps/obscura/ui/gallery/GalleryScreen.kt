@@ -1,5 +1,8 @@
 package com.shahaabapps.obscura.ui.gallery
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,8 +36,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -54,8 +65,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,6 +101,17 @@ fun GalleryScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
+    val selecting by viewModel.selecting.collectAsStateWithLifecycle()
+    val selection by viewModel.selection.collectAsStateWithLifecycle()
+    val export by viewModel.export.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var confirm by remember { mutableStateOf<BulkAction?>(null) }
+    var pickingAlbum by remember { mutableStateOf(false) }
+    val exportFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        viewModel.exportTo(tree, viewModel.selectedFiles())
+    }
+    BackHandler(enabled = selecting) { viewModel.endSelecting() }
+    val ids = remember(state.flat) { state.flat.map { it.id } }
 
     // Floating month label while scrolling, standing in for sticky headers.
     val currentMonth by remember(state.entries, settings.groupByMonth) {
@@ -99,24 +124,35 @@ fun GalleryScreen(
 
     Column(Modifier.fillMaxSize().background(Prism.Ink).safeDrawingPadding()) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RoundIconButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Gallery", style = PrismType.title, color = Prism.Paper)
-                    Text("%,d ITEMS · SEALED".format(state.totalMedia), style = PrismType.label, color = Prism.Muted)
-                }
-                Surface(
-                    onClick = { sheetOpen = true },
-                    shape = CircleShape,
-                    color = Prism.Paper,
-                    contentColor = Prism.Ink,
-                    modifier = Modifier.height(44.dp),
-                ) {
-                    Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.AutoMirrored.Outlined.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("${settings.sortBy.label} ${if (settings.descending) "↓" else "↑"}", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight))
+            if (selecting) {
+                SelectionHeader(
+                    count = selection.size,
+                    allSelected = state.flat.isNotEmpty() && selection.containsAll(state.flat.map { it.id }),
+                    onClose = viewModel::endSelecting,
+                    onSelectAll = viewModel::selectAll,
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RoundIconButton(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Gallery", style = PrismType.title, color = Prism.Paper)
+                        Text("%,d ITEMS · SEALED".format(state.totalMedia), style = PrismType.label, color = Prism.Muted)
+                    }
+                    RoundIconButton(Icons.Outlined.CheckCircle, "Select", viewModel::startSelecting)
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        onClick = { sheetOpen = true },
+                        shape = CircleShape,
+                        color = Prism.Paper,
+                        contentColor = Prism.Ink,
+                        modifier = Modifier.height(44.dp),
+                    ) {
+                        Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.AutoMirrored.Outlined.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("${settings.sortBy.label} ${if (settings.descending) "↓" else "↑"}", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight))
+                        }
                     }
                 }
             }
@@ -155,6 +191,7 @@ fun GalleryScreen(
             } else {
                 LazyVerticalGrid(
                     state = gridState,
+                    modifier = Modifier.fillMaxSize().dragToSelect(gridState, selecting, ids, selection, viewModel::setSelection),
                     columns = GridCells.Fixed(settings.columns),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -177,12 +214,27 @@ fun GalleryScreen(
                                     SortBy.DATE -> if (settings.columns == 3) dayOf(entry.file.takenAt) else null
                                 },
                                 radius = if (settings.columns >= 5) 4 else 8,
+                                selected = if (selecting) entry.file.id in selection else null,
                                 modifier = Modifier
                                     .aspectRatio(1f)
                                     .animateItem()
-                                    .semantics { contentDescription = "${GalleryLogic.typeLabel(entry.file)}, ${entry.file.name}" + if (entry.file.favorite) ", favourite" else "" }
-                                    .clickable(role = Role.Button, onClickLabel = if (entry.file.kind == FileKind.VIDEO) "Play" else "Open") {
-                                        if (entry.file.kind == FileKind.VIDEO) onPlay(entry.file.id) else onOpen(entry.file.id)
+                                    .semantics {
+                                        contentDescription = "${GalleryLogic.typeLabel(entry.file)}, ${entry.file.name}" + if (entry.file.favorite) ", favourite" else ""
+                                        if (selecting) this.selected = entry.file.id in selection
+                                    }
+                                    .clickable(
+                                        role = if (selecting) Role.Checkbox else Role.Button,
+                                        onClickLabel = when {
+                                            selecting -> if (entry.file.id in selection) "Deselect" else "Select"
+                                            entry.file.kind == FileKind.VIDEO -> "Play"
+                                            else -> "Open"
+                                        },
+                                    ) {
+                                        when {
+                                            selecting -> viewModel.toggle(entry.file.id)
+                                            entry.file.kind == FileKind.VIDEO -> onPlay(entry.file.id)
+                                            else -> onOpen(entry.file.id)
+                                        }
                                     },
                             )
                         }
@@ -190,6 +242,56 @@ fun GalleryScreen(
                 }
                 MonthPill(currentMonth, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
             }
+            ExportStatus(export, viewModel::cancelExport, viewModel::dismissExport, Modifier.align(Alignment.BottomCenter).padding(12.dp))
+        }
+        if (selecting) {
+            SelectionActions(
+                enabled = selection.isNotEmpty(),
+                allFavourite = viewModel.selectedFiles().let { it.isNotEmpty() && it.all { f -> f.favorite } },
+                onShare = { confirm = BulkAction.SHARE },
+                onExport = { confirm = BulkAction.EXPORT },
+                onAlbum = { pickingAlbum = true },
+                onFavourite = viewModel::favoriteSelected,
+                onShred = { confirm = BulkAction.SHRED },
+            )
+        }
+    }
+
+    confirm?.let { action ->
+        val count = selection.size
+        BulkConfirm(
+            action = action,
+            count = count,
+            onConfirm = {
+                confirm = null
+                when (action) {
+                    BulkAction.SHARE -> context.startActivity(viewModel.share(viewModel.selectedFiles()))
+                    BulkAction.EXPORT -> {
+                        viewModel.beginPicking()
+                        exportFolder.launch(null)
+                    }
+                    BulkAction.SHRED -> viewModel.shredSelected()
+                }
+            },
+            onDismiss = { confirm = null },
+        )
+    }
+
+    if (pickingAlbum) {
+        ModalBottomSheet(
+            onDismissRequest = { pickingAlbum = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Prism.Surface,
+        ) {
+            val files = viewModel.selectedFiles()
+            com.shahaabapps.obscura.ui.organize.AlbumPicker(
+                fileIds = files.map { it.id },
+                currentAlbumId = files.map { it.albumId }.distinct().singleOrNull(),
+                onDone = {
+                    pickingAlbum = false
+                    viewModel.endSelecting()
+                },
+            )
         }
     }
 
@@ -330,3 +432,125 @@ private fun directionLabel(settings: GallerySettings) = when (settings.sortBy) {
 private val dayFormat = SimpleDateFormat("d", Locale.getDefault())
 
 private fun dayOf(millis: Long): String = dayFormat.format(Date(millis))
+
+enum class BulkAction { SHARE, EXPORT, SHRED }
+
+@Composable
+private fun SelectionHeader(count: Int, allSelected: Boolean, onClose: () -> Unit, onSelectAll: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RoundIconButton(Icons.Outlined.Close, "Stop selecting", onClose)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(if (count == 0) "Select items" else "%,d selected".format(count), style = PrismType.title, color = Prism.Paper)
+            Text("TAP, OR DRAG ACROSS TILES", style = PrismType.label, color = Prism.Muted)
+        }
+        Surface(onClick = onSelectAll, shape = CircleShape, color = Prism.Paper, contentColor = Prism.Ink, modifier = Modifier.height(44.dp)) {
+            Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                Text(if (allSelected) "Deselect all" else "Select all", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionActions(
+    enabled: Boolean,
+    allFavourite: Boolean,
+    onShare: () -> Unit,
+    onExport: () -> Unit,
+    onAlbum: () -> Unit,
+    onFavourite: () -> Unit,
+    onShred: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).prismBlock(Prism.Paper, 30).padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        ActionButton(Icons.Outlined.Share, "Share", enabled, onShare)
+        ActionButton(Icons.Outlined.Download, "Save copy", enabled, onExport)
+        ActionButton(Icons.Outlined.CreateNewFolder, "Album", enabled, onAlbum)
+        ActionButton(if (allFavourite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, if (allFavourite) "Unfavourite" else "Favourite", enabled, onFavourite)
+        ActionButton(Icons.Outlined.DeleteForever, "Shred", enabled, onShred, tint = Prism.Orange)
+    }
+}
+
+@Composable
+private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, onClick: () -> Unit, tint: Color = Prism.Ink) {
+    Column(
+        Modifier.clip(RoundedCornerShape(18.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val color = if (enabled) (if (tint == Prism.Orange) Color(0xFFD9541A) else tint) else Prism.Muted
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = PrismType.label.copy(fontSize = PrismType.label.fontSize * 0.9f, letterSpacing = PrismType.body.letterSpacing), color = color)
+    }
+}
+
+@Composable
+internal fun BulkConfirm(action: BulkAction, count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val files = if (count == 1) "1 file" else "%,d files".format(count)
+    val (title, text, button) = when (action) {
+        BulkAction.SHARE -> Triple(
+            "Share $files?",
+            "The app you pick gets a readable copy, which Obscura can't protect or take back. The links stop working when Obscura locks.",
+            "Share",
+        )
+        BulkAction.EXPORT -> Triple(
+            "Save $files outside the vault?",
+            "Decrypted copies are saved where you choose. They aren't protected: other apps, cloud backup and anyone using your phone can see them. The originals stay sealed.",
+            "Choose folder",
+        )
+        BulkAction.SHRED -> Triple(
+            "Shred $files?",
+            "Their keys are destroyed, so they can't be recovered. Copies on a backup drive are removed at the next backup.",
+            "Shred",
+        )
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Prism.Surface,
+        title = { Text(title, style = PrismType.heading, color = Prism.Paper) },
+        text = { Text(text, style = PrismType.body, color = Prism.Muted) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onConfirm) {
+                Text(button, color = if (action == BulkAction.SHARE) Prism.Sun else Prism.Orange, style = PrismType.button)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel", color = Prism.Paper, style = PrismType.button) }
+        },
+    )
+}
+
+/** Progress of a running export, then a short summary. */
+@Composable
+fun ExportStatus(progress: com.shahaabapps.obscura.export.ExportProgress, onCancel: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    if (!progress.running && !progress.finished) return
+    Row(
+        modifier.fillMaxWidth().prismBlock(if (progress.running) Prism.Sun else Prism.Mint, 24).padding(horizontal = 16.dp, vertical = 12.dp)
+            .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                when {
+                    progress.running -> "SAVING COPIES · ${(progress.fraction * 100).toInt()}%"
+                    progress.cancelled -> "EXPORT STOPPED"
+                    else -> "COPIES SAVED"
+                },
+                style = PrismType.label,
+                color = Prism.Ink,
+            )
+            Text(
+                if (progress.running) "%,d of %,d · %s of %s".format(progress.done, progress.total, formatBytes(progress.bytesDone), formatBytes(progress.bytesTotal))
+                else "%,d saved".format(progress.exported) + if (progress.failed > 0) ", %,d failed".format(progress.failed) else "",
+                style = PrismType.body,
+                color = Prism.Ink,
+            )
+        }
+        androidx.compose.material3.TextButton(onClick = if (progress.running) onCancel else onDismiss) {
+            Text(if (progress.running) "Cancel" else "Done", style = PrismType.button, color = Prism.Ink)
+        }
+    }
+}

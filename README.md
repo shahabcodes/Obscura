@@ -7,6 +7,7 @@ An offline, encrypted vault for photos, videos, audio and documents on Android.
 - **Invisible to other apps.** Files live in app-private storage and are decrypted in memory only.
 - **Encrypted backups.** The vault can be copied, still encrypted, to a USB drive or folder and restored on a new phone with the passphrase or recovery key.
 - **Recovery key you can keep.** Save it as an AES-256 password-protected PDF to print, or create a new one in Security.
+- **Get files back out, on your terms.** Save decrypted copies or share once through links that die when the vault locks, one file or a multi-selection at a time.
 
 ## Build
 

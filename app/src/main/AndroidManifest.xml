@@ -46,5 +46,17 @@
             android:name=".backup.BackupService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".export.ExportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- One-time share links. Not exported: only apps handed a link may read that file. -->
+        <provider
+            android:name=".export.ShareProvider"
+            android:authorities="com.shahaabapps.Obscura.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

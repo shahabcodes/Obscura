@@ -1,14 +1,25 @@
 package com.shahaabapps.obscura.ui.gallery
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
+import com.shahaabapps.obscura.export.ExportManager
+import com.shahaabapps.obscura.export.ExportProgress
+import com.shahaabapps.obscura.export.ShareGrants
+import com.shahaabapps.obscura.export.shareIntent
+import com.shahaabapps.obscura.vault.AutoLock
+import com.shahaabapps.obscura.vault.BULK_CHUNK
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,8 +30,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /** Remembers how the gallery is sorted and laid out, shared by the grid, viewer and reel. */
 @Singleton
@@ -63,6 +72,9 @@ data class GalleryUiState(
 class GalleryViewModel @Inject constructor(
     private val session: VaultSession,
     private val settingsStore: GallerySettingsStore,
+    private val exportManager: ExportManager,
+    private val shareGrants: ShareGrants,
+    private val autoLock: AutoLock,
 ) : ViewModel() {
 
     val settings: StateFlow<GallerySettings> = settingsStore.settings
@@ -91,6 +103,105 @@ class GalleryViewModel @Inject constructor(
     fun setFavorite(file: VaultFile, favorite: Boolean) {
         viewModelScope.launch { session.openVault?.database?.files()?.setFavorite(file.id, favorite) }
     }
+
+    // ---- Multi-select ----
+
+    private val _selecting = MutableStateFlow(false)
+    private val _selection = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Selection mode is on (even with nothing picked yet, after tapping Select). */
+    val selecting: StateFlow<Boolean> = _selecting.asStateFlow()
+    val selection: StateFlow<Set<String>> = _selection.asStateFlow()
+
+    fun startSelecting() {
+        _selecting.value = true
+    }
+
+    fun endSelecting() {
+        _selecting.value = false
+        _selection.value = emptySet()
+    }
+
+    fun setSelection(ids: Set<String>) {
+        _selection.value = ids
+        if (ids.isNotEmpty()) _selecting.value = true
+    }
+
+    fun toggle(id: String) = setSelection(SelectionLogic.toggle(_selection.value, id))
+
+    /** Selects everything visible, or clears the selection when it already is everything. */
+    fun selectAll() {
+        val all = state.value.flat.map { it.id }.toSet()
+        setSelection(if (_selection.value.containsAll(all)) emptySet() else all)
+    }
+
+    fun selectedFiles(): List<VaultFile> = _selection.value.let { ids -> state.value.flat.filter { it.id in ids } }
+
+    /** Favourites them all, or un-favourites them when every one already is. */
+    fun favoriteSelected() {
+        val files = selectedFiles()
+        val favorite = !files.all { it.favorite }
+        viewModelScope.launch {
+            val dao = session.openVault?.database?.files() ?: return@launch
+            files.map { it.id }.chunked(BULK_CHUNK).forEach { dao.setFavoriteAll(it, favorite) }
+        }
+    }
+
+    fun shredSelected() {
+        val files = selectedFiles()
+        endSelecting()
+        viewModelScope.launch {
+            val vault = session.openVault ?: return@launch
+            // One transaction for the index, so shredding thousands of files stays quick.
+            vault.database.withTransaction { files.forEach { vault.shred(it) } }
+        }
+    }
+
+    // ---- Export and share ----
+
+    val export: StateFlow<ExportProgress> = exportManager.progress
+
+    private var picking = false
+
+    /** Keeps the vault open while the system picker is on screen. */
+    fun beginPicking() {
+        if (!picking) {
+            picking = true
+            autoLock.hold()
+        }
+    }
+
+    private fun endPicking() {
+        if (picking) {
+            picking = false
+            autoLock.release()
+        }
+    }
+
+    /** Saves decrypted copies of [files] into the picked folder. */
+    fun exportTo(tree: Uri?, files: List<VaultFile>) {
+        endPicking()
+        if (tree != null && exportManager.exportToFolder(tree, files)) endSelecting()
+    }
+
+    /**
+     * Saves one decrypted copy to the document the user named. The picker's hold always ends;
+     * if the file is gone (shredded meanwhile), the empty document the picker made is removed.
+     */
+    fun exportFile(target: Uri?, file: VaultFile?) {
+        endPicking()
+        if (target == null) return
+        if (file == null || !exportManager.exportFile(target, file)) exportManager.discard(target)
+    }
+
+    fun cancelExport() = exportManager.cancel()
+
+    fun dismissExport() = exportManager.reset()
+
+    /** A chooser that hands [files] to one app through links that die when the vault locks. */
+    fun share(files: List<VaultFile>): Intent = shareIntent(shareGrants.grant(files), files)
+
+    override fun onCleared() = endPicking()
 
     fun shred(file: VaultFile, onDone: () -> Unit = {}) {
         viewModelScope.launch {

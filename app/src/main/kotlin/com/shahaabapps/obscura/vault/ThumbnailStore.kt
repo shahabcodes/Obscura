@@ -7,12 +7,12 @@ import android.media.MediaMetadataRetriever
 import android.util.LruCache
 import androidx.exifinterface.media.ExifInterface
 import com.shahaabapps.obscura.crypto.FileCipher
+import java.io.File
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.InputStream
 
 /**
  * Small previews for the gallery. Each thumbnail is generated once from the sealed file,
@@ -45,10 +45,17 @@ class ThumbnailStore(
 
     /** A photo decoded for full-screen viewing, scaled down to fit [maxSide] pixels. Not cached. */
     suspend fun display(file: VaultFile, maxSide: Int): Bitmap? = withContext(Dispatchers.IO) {
-        when (file.kind) {
-            FileKind.PHOTO -> decodeImage(file, maxSide)
-            FileKind.VIDEO -> videoFrame(file, maxSide)
-            else -> null
+        // A damaged or missing blob shows as "no preview" rather than crashing the viewer.
+        try {
+            when (file.kind) {
+                FileKind.PHOTO -> decodeImage(file, maxSide)
+                FileKind.VIDEO -> videoFrame(file, maxSide)
+                else -> null
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -24,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -46,10 +49,14 @@ fun MediaTile(
     badge: String?,
     radius: Int,
     modifier: Modifier = Modifier,
+    /** Null outside selection mode; otherwise whether this tile is selected. */
+    selected: Boolean? = null,
 ) {
     val bitmap = rememberThumbnail(file, load)
     val alpha by animateFloatAsState(if (bitmap != null) 1f else 0f, tween(260), label = "thumb")
-    Box(modifier.clip(RoundedCornerShape(radius.dp)).background(Prism.SurfaceHigh)) {
+    val scale by animateFloatAsState(if (selected == true) 0.86f else 1f, tween(160), label = "selected")
+    Box(modifier.border(if (selected == true) 3.dp else 0.dp, Prism.Sun, RoundedCornerShape(radius.dp + 2.dp))) {
+    Box(Modifier.fillMaxSize().scale(scale).clip(RoundedCornerShape(radius.dp)).background(Prism.SurfaceHigh)) {
         bitmap?.let {
             Image(
                 bitmap = it.asImageBitmap(),
@@ -83,6 +90,17 @@ fun MediaTile(
                 modifier = Modifier.align(Alignment.BottomStart).padding(5.dp).clip(RoundedCornerShape(7.dp)).background(Prism.Ink.copy(alpha = 0.8f)).padding(horizontal = 5.dp, vertical = 2.dp),
             )
         }
+    }
+    if (selected != null) {
+        Box(
+            Modifier.align(Alignment.TopStart).padding(6.dp).size(22.dp).clip(CircleShape)
+                .background(if (selected) Prism.Sun else Prism.Ink.copy(alpha = 0.35f))
+                .border(2.dp, if (selected) Prism.Sun else Prism.Paper, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = Prism.Ink, modifier = Modifier.size(15.dp))
+        }
+    }
     }
 }
 

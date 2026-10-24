@@ -8,6 +8,34 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-24
+
+### Added
+- Multi-select in the gallery, with iOS-style gestures:
+  - Long-press a photo or video and keep dragging to select every tile you pass. Drag back towards where you started to let tiles go again.
+  - While selecting, swipe sideways across tiles to select a run of them, or to deselect them if the first one was already selected. Up and down still scroll.
+  - Drag near the top or bottom edge and the gallery scrolls along with you.
+  - Tap tiles to add or remove them, or use Select and Select all in the header. Back or the close button ends selecting.
+  - Selected tiles shrink behind a sun-coloured frame with a check mark, and a gentle vibration marks the start.
+- Bulk actions for the selection: share, save copies, add to an album (or a new one), favourite or unfavourite, and shred.
+- Save copy: decrypted copies go to a folder or USB drive you pick (from the selection), or to a file you name (from the photo viewer). Copies never overwrite: a second "beach.jpg" becomes "beach (2).jpg". Big exports run in the background with a progress card, a notification without file names, and Cancel. Obscura warns first that copies outside the vault aren't protected.
+- Share: hands photos, videos or files to one app you choose, through private links that decrypt on the fly and support seeking, so nothing decrypted is written to storage. Links are read-only, can't be guessed, don't carry the file name, and work for 15 minutes, only while Obscura stays unlocked. Locking ends them for good: an app that already had a file open can't read on after the vault is unlocked again, even from the decoy vault. The vault stays open for up to a minute so the other app can read them.
+- Share and Save copy in the photo viewer, whose action bar is now compact icons with labels.
+
+### Changed
+- Favouriting, moving and shredding many files at once now run as batched database updates, so thousands of files take seconds.
+- The full-screen viewer shows "no preview" for a damaged file instead of closing.
+- Any lock (panic lock, Lock now, screen off) stops an export straight away, even in the middle of a file, and removes the partial copy.
+
+### Tests
+- 110 unit tests and 84 on-device tests, including:
+  - Real touch gestures: long-press and drag, sideways swipes and tap toggles.
+  - Exports compared byte for byte, and stopped mid-file by a lock.
+  - Share links streamed, seeked and refused for writing. A link stays dead after it expires, and an open reader stays dead after a lock and a fresh unlock.
+- Large-vault stress test on the emulator with 20,000 files across seven years: gallery opens in 1.1 s, scrolls end to end and back in 2.5 s, all 20,000 selected and favourited in 3.1 s, 15 MB of memory in use; grouping by month 0.14 s, search 0.02 s.
+- A 5 GiB file through the real file cipher on a PC: sealed at 389 MB/s, unsealed at 1,095 MB/s, identical byte for byte, and read correctly at offsets past 4 GiB.
+- Before release, an automated security review of every change since 0.9.0, now part of every release. It found no critical or high issues. The three medium findings were fixed before release: share readers outliving a lock, exports continuing after a lock, and a picker hold that could leak on rotation.
+
 ## [0.9.0] - 2026-10-24
 
 ### Added
@@ -206,7 +234,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/shahabcodes/Obscura/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shahabcodes/Obscura/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/shahabcodes/Obscura/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/shahabcodes/Obscura/compare/v0.6.0...v0.7.0

@@ -1,11 +1,13 @@
 package com.shahaabapps.obscura.ui.gallery
 
 import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -32,9 +34,11 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -49,6 +53,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +65,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -94,6 +100,14 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
     var showInfo by remember { mutableStateOf(false) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
     var pickingAlbum by remember { mutableStateOf(false) }
+    var confirmOut by remember { mutableStateOf<Pair<BulkAction, VaultFile>?>(null) }
+    val context = LocalContext.current
+    val export by viewModel.export.collectAsStateWithLifecycle()
+    var exportingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val saveCopy = rememberLauncherForActivityResult(CreateTypedDocument()) { uri ->
+        viewModel.exportFile(uri, exportingId?.let { id -> files.firstOrNull { it.id == id } })
+        exportingId = null
+    }
     val current = files.getOrNull(pager.currentPage.coerceAtMost(files.lastIndex)) ?: return
 
     var burst by remember { mutableIntStateOf(0) }
@@ -136,18 +150,39 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
             AnimatedVisibility(showInfo, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
                 InfoPanel(current)
             }
+            ExportStatus(export, viewModel::cancelExport, viewModel::dismissExport, Modifier.padding(top = 10.dp))
             Spacer(Modifier.height(10.dp))
             Row(
-                Modifier.fillMaxWidth().height(68.dp).clip(CircleShape).background(Prism.Surface.copy(alpha = 0.95f)).padding(horizontal = 8.dp),
+                Modifier.fillMaxWidth().height(68.dp).clip(CircleShape).background(Prism.Surface.copy(alpha = 0.95f)).padding(horizontal = 10.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 BarAction(Icons.Outlined.Info, "Info", active = showInfo) { showInfo = !showInfo }
                 BarAction(Icons.Outlined.Slideshow, "Reel", active = false) { onReel(current.id) }
                 BarAction(Icons.Outlined.Folder, "Album", active = current.albumId != null) { pickingAlbum = true }
+                BarAction(Icons.Outlined.Share, "Share", active = false) { confirmOut = BulkAction.SHARE to current }
+                BarAction(Icons.Outlined.Download, "Save copy", active = false) { confirmOut = BulkAction.EXPORT to current }
                 BarAction(Icons.Outlined.DeleteForever, "Shred", active = false, tint = Prism.Orange) { confirmShred = current }
             }
         }
+    }
+
+    confirmOut?.let { (action, file) ->
+        BulkConfirm(
+            action = action,
+            count = 1,
+            onConfirm = {
+                confirmOut = null
+                if (action == BulkAction.SHARE) {
+                    context.startActivity(viewModel.share(listOf(file)))
+                } else {
+                    exportingId = file.id
+                    viewModel.beginPicking()
+                    saveCopy.launch(file.name to file.mimeType)
+                }
+            },
+            onDismiss = { confirmOut = null },
+        )
     }
 
     confirmShred?.let { file ->
@@ -161,7 +196,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
             onDismissRequest = { pickingAlbum = false },
             containerColor = Prism.Surface,
         ) {
-            com.shahaabapps.obscura.ui.organize.AlbumPicker(current.id, current.albumId, onDone = { pickingAlbum = false })
+            com.shahaabapps.obscura.ui.organize.AlbumPicker(listOf(current.id), current.albumId, onDone = { pickingAlbum = false })
         }
     }
 }
@@ -293,14 +328,16 @@ private fun CircleButton(onClick: () -> Unit, content: @Composable () -> Unit) {
 
 @Composable
 private fun BarAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, tint: androidx.compose.ui.graphics.Color = Prism.Paper, onClick: () -> Unit) {
-    Box(
-        Modifier.height(54.dp).clip(CircleShape).background(if (active) Prism.Sun else androidx.compose.ui.graphics.Color.Transparent),
-        contentAlignment = Alignment.Center,
+    // Icon over a short label, so six actions fit across a phone.
+    Column(
+        Modifier.clip(RoundedCornerShape(18.dp))
+            .background(if (active) Prism.Sun else androidx.compose.ui.graphics.Color.Transparent)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TextButton(onClick = onClick) {
-            Icon(icon, contentDescription = null, tint = if (active) Prism.Ink else tint)
-            Spacer(Modifier.width(6.dp))
-            Text(label, style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = if (active) Prism.Ink else tint)
-        }
+        Icon(icon, contentDescription = null, tint = if (active) Prism.Ink else tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = PrismType.label.copy(letterSpacing = PrismType.body.letterSpacing), color = if (active) Prism.Ink else tint, maxLines = 1)
     }
 }
