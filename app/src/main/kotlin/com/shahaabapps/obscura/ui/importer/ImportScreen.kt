@@ -51,7 +51,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shahaabapps.obscura.importer.ImportProgress
 import com.shahaabapps.obscura.ui.components.GhostButton
+import com.shahaabapps.obscura.ui.components.Motion
+import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
+import com.shahaabapps.obscura.ui.components.SuccessOnMint
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.setup.SealingIndicator
@@ -217,9 +220,11 @@ private fun ProgressCard(progress: ImportProgress, onCancel: () -> Unit) {
             Spacer(Modifier.weight(1f))
             Text("%,d / %,d".format(progress.processed, progress.total), style = PrismType.label, color = Prism.Ink)
         }
-        Spacer(Modifier.height(10.dp))
-        Text("$percent%", style = PrismType.stat, color = Prism.Ink)
-        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("$percent%", style = PrismType.stat, color = Prism.Ink, modifier = Modifier.weight(1f))
+            MotionArt(Motion.SEAL, Modifier.size(88.dp))
+        }
+        Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(12.dp).clip(CircleShape).background(Prism.Ink)) {
             Box(Modifier.fillMaxWidth(progress.fraction).height(12.dp).background(Prism.Paper))
         }
@@ -248,6 +253,10 @@ private fun SummaryCard(
     onDone: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().prismBlock(Prism.Mint).padding(20.dp)) {
+        if (!progress.cancelled) {
+            MotionArt(Motion.SUCCESS, Modifier.size(64.dp), recolor = SuccessOnMint)
+            Spacer(Modifier.height(10.dp))
+        }
         Text(if (progress.cancelled) "IMPORT CANCELLED" else "ALL SEALED", style = PrismType.label, color = Prism.Ink)
         Spacer(Modifier.height(10.dp))
         Text("%,d".format(progress.sealed), style = PrismType.stat, color = Prism.Ink)

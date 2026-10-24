@@ -3,6 +3,7 @@ package com.shahaabapps.obscura.vault
 import android.content.Context
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.shahaabapps.obscura.crypto.DeviceBinding
+import com.shahaabapps.obscura.crypto.DeviceKeyLostException
 import com.shahaabapps.obscura.crypto.KdfParams
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.crypto.KeystoreGate
@@ -13,16 +14,16 @@ import com.shahaabapps.obscura.crypto.VaultKeys
 import com.shahaabapps.obscura.crypto.WrongSecretException
 import com.shahaabapps.obscura.crypto.wipe
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.withContext
 import java.io.File
 import javax.crypto.Cipher
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 /** The unlocked vault: keys, encrypted index and file store. Closed together on lock. */
 class OpenVault internal constructor(
@@ -123,11 +124,31 @@ class VaultSession @Inject constructor(
     suspend fun unlockWithPin(pin: CharArray): UnlockResult {
         val lock = store.readPin() ?: return UnlockResult.Failed("PIN unlock is not set up")
         return attempt(pin::wipe) {
-            try {
-                QuickUnlock.unlockWithPin(lock, store.readHeader().vaultId, pin, pinBinding) to false
+            val real = try {
+                QuickUnlock.unlockWithPin(lock, store.readHeader().vaultId, pin, pinBinding)
             } catch (e: WrongSecretException) {
-                val decoyLock = decoyStore.readPin() ?: throw e
-                QuickUnlock.unlockWithPin(decoyLock, decoyStore.readHeader().vaultId, pin, decoyPinBinding) to true
+                null
+            } catch (e: DeviceKeyLostException) {
+                // The PIN can never work again on this phone: forget it, then still try the decoy.
+                store.deletePin()
+                null
+            }
+            if (real != null) return@attempt real to false
+            val decoyLock = decoyStore.readPin()
+            val decoy = decoyLock?.let {
+                try {
+                    QuickUnlock.unlockWithPin(it, decoyStore.readHeader().vaultId, pin, decoyPinBinding)
+                } catch (e: WrongSecretException) {
+                    null
+                } catch (e: DeviceKeyLostException) {
+                    decoyStore.deletePin()
+                    null
+                }
+            }
+            when {
+                decoy != null -> decoy to true
+                store.readPin() == null -> throw DeviceKeyLostException("PIN reset")
+                else -> throw WrongSecretException()
             }
         }
     }
@@ -168,6 +189,49 @@ class VaultSession @Inject constructor(
             replacement.wipe()
         }
     }
+
+    /**
+     * Issues a new recovery key for the open vault, after checking [passphrase] (wrong guesses
+     * count against the lockout). The old recovery key stops working. Returns the new key to
+     * show once, or null with the reason.
+     */
+    suspend fun newRecoveryKey(passphrase: CharArray): Pair<UnlockResult, RecoveryKey?> = withContext(Dispatchers.Default) {
+        try {
+            val vault = openVault ?: return@withContext UnlockResult.Failed("Unlock the vault first") to null
+            val remaining = lockout.remainingMs()
+            if (remaining > 0) return@withContext UnlockResult.LockedOut(remaining) to null
+            val header = vault.store.readHeader()
+            try {
+                Vault.unlock(header, passphrase).close()
+            } catch (e: WrongSecretException) {
+                return@withContext failure() to null
+            }
+            lockout.recordSuccess()
+            val (updated, key) = Vault.newRecoveryKey(header, vault.keys)
+            vault.store.writeHeader(updated)
+            UnlockResult.Success to key
+        } catch (e: Exception) {
+            UnlockResult.Failed("A new recovery key could not be made: ${e.message}") to null
+        } finally {
+            passphrase.wipe()
+        }
+    }
+
+    /**
+     * Whether [candidate] is the open vault's passphrase. Only answers while unlocked, so it
+     * can't be used to guess; used to stop the passphrase being reused as a PDF password.
+     */
+    suspend fun isVaultPassphrase(candidate: CharArray): Boolean = withContext(Dispatchers.Default) {
+        try {
+            val vault = openVault ?: return@withContext false
+            opens { Vault.unlock(vault.store.readHeader(), candidate) }
+        } finally {
+            candidate.wipe()
+        }
+    }
+
+    /** The open vault's id (not secret), for labelling a recovery-key PDF. */
+    fun openVaultId(): ByteArray? = openVault?.keys?.vaultId?.copyOf()
 
     /** Whether the open vault (or, while locked, the real vault) has a PIN. */
     fun hasPin(): Boolean = currentStore.readPin() != null
@@ -359,6 +423,8 @@ class VaultSession @Inject constructor(
                 lockout.recordSuccess()
                 open(keys, if (decoy) decoyStore else store, decoy)
                 UnlockResult.Success
+            } catch (e: DeviceKeyLostException) {
+                UnlockResult.Failed("PIN unlock was reset on this phone. Use your passphrase, then set a new PIN in Security.")
             } catch (e: Exception) {
                 UnlockResult.Failed("The vault could not be opened: ${e.message}")
             } finally {

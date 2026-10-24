@@ -35,12 +35,12 @@ import com.shahaabapps.obscura.ui.importer.ImportScreen
 import com.shahaabapps.obscura.ui.organize.AlbumScreen
 import com.shahaabapps.obscura.ui.organize.AlbumsScreen
 import com.shahaabapps.obscura.ui.organize.SearchScreen
-import com.shahaabapps.obscura.ui.security.SecurityScreen
-import com.shahaabapps.obscura.vault.FileKind
-import com.shahaabapps.obscura.vault.VaultFile
+import com.shahaabapps.obscura.ui.recovery.NewRecoveryKeyScreen
 import com.shahaabapps.obscura.ui.screens.HomeScreen
 import com.shahaabapps.obscura.ui.screens.HomeViewModel
 import com.shahaabapps.obscura.ui.screens.WelcomeScreen
+import com.shahaabapps.obscura.ui.security.LicencesScreen
+import com.shahaabapps.obscura.ui.security.SecurityScreen
 import com.shahaabapps.obscura.ui.setup.BiometricSetupScreen
 import com.shahaabapps.obscura.ui.setup.PassphraseSetupScreen
 import com.shahaabapps.obscura.ui.setup.PinSetupScreen
@@ -50,6 +50,8 @@ import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.unlock.PassphraseUnlockScreen
 import com.shahaabapps.obscura.ui.unlock.RecoveryUnlockScreen
 import com.shahaabapps.obscura.ui.unlock.UnlockScreen
+import com.shahaabapps.obscura.vault.FileKind
+import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
 
@@ -80,6 +82,8 @@ object Routes {
     const val ALBUMS = "albums"
     const val SECURITY = "security"
     const val BACKUP = "backup"
+    const val LICENCES = "licences"
+    const val RECOVERY_KEY = "security/recovery"
 
     /** Destinations that show the floating bottom bar. */
     val tabs = setOf(HOME, SEARCH, IMPORT, ALBUMS, SECURITY)
@@ -216,7 +220,15 @@ fun ObscuraNavHost(
                     onOpenFile = { file -> navController.openFile(file, gallery) },
                 )
             }
-            composable(Routes.SECURITY) { SecurityScreen(onBackup = { navController.navigate(Routes.BACKUP) }) }
+            composable(Routes.SECURITY) {
+                SecurityScreen(
+                    onBackup = { navController.navigate(Routes.BACKUP) },
+                    onLicences = { navController.navigate(Routes.LICENCES) },
+                    onRecoveryKey = { navController.navigate(Routes.RECOVERY_KEY) },
+                )
+            }
+            composable(Routes.RECOVERY_KEY) { NewRecoveryKeyScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.LICENCES) { LicencesScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.IMPORT) { ImportScreen() }
         }
 

@@ -81,7 +81,7 @@ class SetupAndUnlockFlowTest {
 
         // Recovery key (Argon2id at full strength runs first)
         waitForText("Your recovery key.", 60_000)
-        compose.onNodeWithText("I've written this key down safely").performScrollTo().performClick()
+        compose.onNodeWithText("I've written this key down or saved the PDF").performScrollTo().performClick()
         compose.onNodeWithText("Continue").performScrollTo().performClick()
 
         // PIN, twice

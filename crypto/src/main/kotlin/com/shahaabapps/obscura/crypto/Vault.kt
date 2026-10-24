@@ -113,6 +113,24 @@ object Vault {
         }
     }
 
+    /**
+     * Issues a new recovery key for an unlocked vault and returns the header that uses it. The
+     * old recovery key stops working; the passphrase, PIN and fingerprint are unaffected.
+     * Recovery keys are never stored, so this is the only way to get one after setup.
+     */
+    fun newRecoveryKey(header: VaultHeader, keys: VaultKeys): Pair<VaultHeader, RecoveryKey> {
+        require(keys.vaultId.contentEquals(header.vaultId)) { "Keys belong to another vault" }
+        val recoveryKey = RecoveryKey.generate()
+        val salt = randomBytes(Argon2Kdf.SALT_SIZE)
+        val kek = recoveryKek(recoveryKey, salt)
+        try {
+            val wrapped = KeyWrap.wrap(kek, keys.master(), aad(RECOVERY_PURPOSE, header.vaultId))
+            return header.copy(recoverySalt = salt, masterByRecovery = wrapped) to recoveryKey
+        } finally {
+            kek.wipe()
+        }
+    }
+
     private const val PASSPHRASE_PURPOSE = "obscura/master/passphrase/v1"
     private const val RECOVERY_PURPOSE = "obscura/master/recovery/v1"
 

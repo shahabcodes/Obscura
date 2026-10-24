@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.gallery.formatDuration
 import com.shahaabapps.obscura.ui.gallery.rememberThumbnail
@@ -88,10 +89,8 @@ fun AudioScreen(viewModel: LibraryViewModel, onBack: () -> Unit, onImport: () ->
                 Text("%,d TRACKS".format(tracks.size), style = PrismType.label, color = Prism.Muted)
             }
             if (tracks.isEmpty()) {
-                Spacer(Modifier.height(40.dp))
-                Text("No audio yet.", style = PrismType.heading, color = Prism.Paper)
-                Spacer(Modifier.height(12.dp))
-                com.shahaabapps.obscura.ui.components.PillButton("Import audio", onClick = onImport)
+                Spacer(Modifier.height(24.dp))
+                EmptyState("No audio yet.", action = { com.shahaabapps.obscura.ui.components.PillButton("Import audio", onClick = onImport) })
                 return@Column
             }
 

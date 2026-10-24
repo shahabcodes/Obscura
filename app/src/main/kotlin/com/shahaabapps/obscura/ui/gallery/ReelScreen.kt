@@ -65,14 +65,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.Motion
+import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
 import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultFile
-import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.launch
 
 /** Full-screen, auto-advancing slideshow through the gallery in its current order. */
 @Composable
@@ -249,24 +251,16 @@ private fun ReelPage(file: VaultFile, viewModel: GalleryViewModel, onDoubleTap: 
     }
 }
 
-/** Pink heart that pops and fades over the centre of the screen. */
+/** The motion kit's heart burst over the centre of the screen; each new key plays it again. */
 @Composable
 private fun HeartBurst(key: Int) {
     if (key == 0) return
-    val scale = remember(key) { Animatable(0f) }
-    val alpha = remember(key) { Animatable(1f) }
-    LaunchedEffect(key) {
-        scale.animateTo(1.25f, spring(dampingRatio = 0.45f, stiffness = 500f))
-        scale.animateTo(1f, tween(120))
-        alpha.animateTo(0f, tween(420, delayMillis = 200))
-    }
+    var visible by remember(key) { mutableStateOf(true) }
+    if (!visible) return
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Icon(
-            Icons.Filled.Favorite,
-            contentDescription = null,
-            tint = Prism.Pink,
-            modifier = Modifier.size(140.dp).scale(scale.value).alpha(alpha.value),
-        )
+        androidx.compose.runtime.key(key) {
+            MotionArt(Motion.FAVORITE, Modifier.size(220.dp), onFinished = { visible = false })
+        }
     }
 }
 

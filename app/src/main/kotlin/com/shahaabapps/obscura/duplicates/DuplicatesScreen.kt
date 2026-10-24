@@ -60,7 +60,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.GhostButton
+import com.shahaabapps.obscura.ui.components.Motion
+import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.components.prismBlock
@@ -116,22 +119,13 @@ fun DuplicatesScreen(onBack: () -> Unit, viewModel: DuplicatesViewModel = hiltVi
 
 @Composable
 private fun Scanning(state: DuplicatesUi.Scanning, title: String = "Comparing photos on this phone…") {
-    val sweep = rememberInfiniteTransition(label = "radar")
-    val angle by sweep.animateFloat(0f, 360f, infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Restart), label = "angle")
     val pct = if (state.total == 0) 0 else state.done * 100 / state.total
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(240.dp).semantics { contentDescription = "Scanning, $pct percent" }, contentAlignment = Alignment.Center) {
-            Canvas(Modifier.fillMaxSize()) {
-                val r = size.minDimension / 2
-                drawCircle(Prism.Surface, r)
-                listOf(0.75f, 0.5f, 0.25f).forEach { drawCircle(Prism.Line, r * it, style = Stroke(1.5.dp.toPx())) }
-            }
-            Canvas(Modifier.fillMaxSize().rotate(angle)) {
-                val r = size.minDimension / 2
-                drawArc(Prism.Orange.copy(alpha = 0.4f), -90f, 50f, true, Offset.Zero, Size(r * 2, r * 2))
-                drawLine(Prism.Orange, Offset(r, r), Offset(r, 0f), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-            }
-            Box(Modifier.size(18.dp).clip(CircleShape).background(Prism.Paper))
+        Box(
+            Modifier.size(260.dp).prismBlock(Prism.Orange, 36).semantics { contentDescription = "Scanning, $pct percent" },
+            contentAlignment = Alignment.Center,
+        ) {
+            MotionArt(Motion.SCAN, Modifier.size(236.dp))
         }
         Spacer(Modifier.height(24.dp))
         Text("$pct%", style = PrismType.stat, color = Prism.Paper)
@@ -144,11 +138,7 @@ private fun Scanning(state: DuplicatesUi.Scanning, title: String = "Comparing ph
 @Composable
 private fun Results(state: DuplicatesUi.Results, viewModel: DuplicatesViewModel, onShred: () -> Unit) {
     if (state.groups.isEmpty()) {
-        Column(Modifier.padding(24.dp)) {
-            Text("No duplicates found.", style = PrismType.heading, color = Prism.Paper)
-            Spacer(Modifier.height(8.dp))
-            Text("Every file in your vault is unique.", style = PrismType.body, color = Prism.Muted)
-        }
+        EmptyState("No duplicates found.", Modifier.padding(24.dp), text = "Every file in your vault is unique.")
         return
     }
     Column(Modifier.fillMaxSize()) {
@@ -240,22 +230,8 @@ private fun CopyTile(file: VaultFile, isBest: Boolean, isMarked: Boolean, viewMo
 
 @Composable
 private fun Done(state: DuplicatesUi.Done, onBack: () -> Unit) {
-    val draw = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { draw.animateTo(1f, tween(700)) }
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Canvas(Modifier.size(170.dp)) {
-            drawCircle(Prism.Mint, size.minDimension / 2 * (0.6f + 0.4f * draw.value))
-            val w = size.width
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.3f, w * 0.52f)
-                lineTo(w * 0.44f, w * 0.66f)
-                lineTo(w * 0.72f, w * 0.38f)
-            }
-            val measure = androidx.compose.ui.graphics.PathMeasure().apply { setPath(path, false) }
-            val partial = androidx.compose.ui.graphics.Path()
-            measure.getSegment(0f, measure.length * draw.value, partial, true)
-            drawPath(partial, Prism.Ink, style = Stroke(12.dp.toPx(), cap = StrokeCap.Round))
-        }
+        MotionArt(Motion.SUCCESS, Modifier.size(170.dp))
         Spacer(Modifier.height(22.dp))
         Text("${formatBytes(state.bytes)} freed", style = PrismType.title, color = Prism.Paper)
         Spacer(Modifier.height(6.dp))

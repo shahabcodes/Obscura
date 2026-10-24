@@ -53,19 +53,22 @@ import com.shahaabapps.obscura.backup.BackupOutcome
 import com.shahaabapps.obscura.backup.BackupProgress
 import com.shahaabapps.obscura.backup.BackupState
 import com.shahaabapps.obscura.ui.components.GhostButton
+import com.shahaabapps.obscura.ui.components.Motion
+import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.components.SuccessOnMint
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
 import com.shahaabapps.obscura.vault.AutoLock
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 data class BackupInfo(val location: BackupLocation? = null, val lastBackupAt: Long? = null)
 
@@ -176,6 +179,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                     detail = buildString {
                         append("%,d copied, %,d already there".format(done.result.copied, done.result.unchanged))
                         if (done.result.removed > 0) append(", %,d shredded files removed".format(done.result.removed))
+                        if (done.result.skipped > 0) append(", %,d shredded during the backup and left out".format(done.result.skipped))
                         append(". ")
                         append(if (done.verify.ok) "Every sealed file is on the drive at the right size." else "Run the backup again to finish it.")
                     },
@@ -302,9 +306,12 @@ private fun ProgressCard(label: String, progress: BackupProgress, note: String) 
             Spacer(Modifier.weight(1f))
             if (progress.filesTotal > 0) Text("%,d / %,d".format(progress.filesDone, progress.filesTotal), style = PrismType.label, color = Prism.Ink)
         }
-        Spacer(Modifier.height(10.dp))
-        Text("${(progress.fraction * 100).toInt()}%", style = PrismType.stat, color = Prism.Ink)
-        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("${(progress.fraction * 100).toInt()}%", style = PrismType.stat, color = Prism.Ink, modifier = Modifier.weight(1f))
+            // Copying: a file dropping into the vault. Checking: the radar.
+            MotionArt(if (progress.phase == "Checking the backup") Motion.SCAN else Motion.SEAL, Modifier.size(88.dp))
+        }
+        Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(12.dp).clip(CircleShape).background(Prism.Ink)) {
             Box(Modifier.fillMaxWidth(progress.fraction).height(12.dp).background(Prism.Paper))
         }
@@ -319,6 +326,10 @@ private fun ProgressCard(label: String, progress: BackupProgress, note: String) 
 @Composable
 private fun ResultCard(color: Color, label: String, headline: String, detail: String) {
     Column(Modifier.fillMaxWidth().prismBlock(color).padding(20.dp)) {
+        if (color == Prism.Mint) {
+            MotionArt(Motion.SUCCESS, Modifier.size(64.dp), recolor = SuccessOnMint)
+            Spacer(Modifier.height(10.dp))
+        }
         Text(label, style = PrismType.label, color = Prism.Ink)
         Spacer(Modifier.height(8.dp))
         Text(headline, style = PrismType.heading, color = Prism.Ink)

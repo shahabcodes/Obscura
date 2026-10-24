@@ -110,6 +110,7 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.lottie.compose)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
@@ -125,6 +126,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // A real PDF reader to check the encrypted recovery-key PDF. Tests only; never shipped.
+    testImplementation(libs.pdfbox)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)

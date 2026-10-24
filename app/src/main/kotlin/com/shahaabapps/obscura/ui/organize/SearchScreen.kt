@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.SecretField
 import com.shahaabapps.obscura.ui.gallery.MediaTile
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -90,7 +91,7 @@ fun SearchScreen(onOpen: (VaultFile) -> Unit, viewModel: SearchViewModel = hiltV
         Spacer(Modifier.height(12.dp))
         when {
             query.isBlank() -> Hint("Search runs inside the encrypted index on this phone. Nothing is sent anywhere.")
-            results.searched && results.files.isEmpty() -> Hint("Nothing sealed matches \"${query.trim()}\".")
+            results.searched && results.files.isEmpty() -> EmptyState("No matches.", Modifier.padding(top = 12.dp), text = "Nothing sealed matches \"${query.trim()}\".")
             else -> {
                 Text(
                     "%,d RESULT%s".format(results.files.size, if (results.files.size == 1) "" else "S"),

@@ -7,10 +7,14 @@ import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import com.shahaabapps.obscura.crypto.CorruptVaultException
 import com.shahaabapps.obscura.importer.ImportManager
+import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.vault.AutoLock
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,9 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
-import javax.inject.Inject
-import javax.inject.Singleton
 
 enum class BackupJob { BACKUP, RESTORE }
 
@@ -91,7 +92,7 @@ class BackupManager @Inject constructor(
 
     fun backup(replaceOtherVault: Boolean = false, startService: Boolean = true): Boolean {
         val location = location() ?: return false
-        return backup(SafBackupDir(context.contentResolver, location.uri), replaceOtherVault, startService)
+        return backup(SafBackupDir(context, location.uri), replaceOtherVault, startService)
     }
 
     /** Starts a backup into [destination]. Returns false if one can't start right now. */
@@ -133,7 +134,7 @@ class BackupManager @Inject constructor(
      * this phone, so a restore can never overwrite one.
      */
     fun restore(tree: Uri, startService: Boolean = true): Boolean =
-        restore(SafBackupDir(context.contentResolver, tree), startService)
+        restore(SafBackupDir(context, tree), startService)
 
     fun restore(source: BackupDir, startService: Boolean = true): Boolean {
         if (store.exists() || _state.value.running != null) return false
@@ -175,7 +176,12 @@ class BackupManager @Inject constructor(
 
     private fun explain(e: Exception): String = when (e) {
         is CorruptVaultException -> e.message ?: "This isn't an Obscura backup"
-        is SecurityException, is java.io.FileNotFoundException ->
+        is BackupSpaceException -> "The drive needs ${formatBytes(e.missingBytes)} more free space. Nothing was copied."
+        is RestoreSpaceException -> "This phone needs ${formatBytes(e.missingBytes)} more free space to restore this backup."
+        is FileTooLargeForDriveException ->
+            "This drive can't hold files over 4 GB, so it's probably formatted as FAT32. Use a drive formatted as exFAT."
+        is SecurityException -> "Obscura no longer has access to that folder. Choose it again."
+        is java.io.FileNotFoundException ->
             "The backup drive isn't available. Plug it in or choose the folder again."
         else -> e.message ?: e.javaClass.simpleName
     }

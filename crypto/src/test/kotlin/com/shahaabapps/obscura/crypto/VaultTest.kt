@@ -34,6 +34,24 @@ class VaultTest {
         }
     }
 
+    @Test
+    fun aNewRecoveryKeyReplacesTheOldOne() {
+        val created = Vault.create(pass("lantern orbit"), FAST_KDF)
+        val (header, fresh) = Vault.newRecoveryKey(created.header, created.keys)
+        Vault.unlock(header, RecoveryKey.parse(fresh.format())).use { keys ->
+            assertArrayEquals(created.keys.master(), keys.master())
+        }
+        // The passphrase is untouched, and the header survives a round trip to disk.
+        Vault.unlock(VaultHeader.fromBytes(header.toBytes()), pass("lantern orbit")).use { keys ->
+            assertArrayEquals(created.keys.master(), keys.master())
+        }
+        try {
+            Vault.unlock(header, created.recoveryKey)
+            fail("the old recovery key must stop working")
+        } catch (expected: WrongSecretException) {
+        }
+    }
+
     @Test(expected = WrongSecretException::class)
     fun recoveryKeyFromAnotherVaultIsRejected() {
         val a = Vault.create(pass("a"), FAST_KDF)

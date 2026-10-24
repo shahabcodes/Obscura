@@ -29,7 +29,6 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,6 +51,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.Motion
+import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.PinDots
 import com.shahaabapps.obscura.ui.components.PinPad
@@ -60,6 +61,8 @@ import com.shahaabapps.obscura.ui.components.SecretField
 import com.shahaabapps.obscura.ui.components.canUseStrongBiometric
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.components.showBiometricPrompt
+import com.shahaabapps.obscura.ui.recovery.RecoveryKeyBlock
+import com.shahaabapps.obscura.ui.recovery.SaveRecoveryPdf
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
 
@@ -224,11 +227,14 @@ private fun Rule(ok: Boolean, text: String) {
 @Composable
 fun SealingIndicator(text: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(60.dp).prismBlock(Prism.Surface, 30).padding(horizontal = 22.dp),
+        modifier = Modifier.fillMaxWidth().height(60.dp).prismBlock(Prism.Surface, 30).padding(start = 9.dp, end = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircularProgressIndicator(color = Prism.Sun, strokeWidth = 3.dp, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(14.dp))
+        // The motion kit's sealing loop: a file dropping into the vault, on a sun disc.
+        androidx.compose.foundation.layout.Box(Modifier.size(42.dp).prismBlock(Prism.Sun, 21)) {
+            MotionArt(Motion.SEAL, Modifier.matchParentSize().padding(3.dp))
+        }
+        Spacer(Modifier.width(12.dp))
         Text(text, style = PrismType.body, color = Prism.Paper)
     }
 }
@@ -236,51 +242,23 @@ fun SealingIndicator(text: String) {
 @Composable
 fun RecoveryKeyScreen(viewModel: SetupViewModel, onContinue: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var revealed by rememberSaveable { mutableStateOf(true) }
     var saved by rememberSaveable { mutableStateOf(false) }
     // The vault already exists here; going back would only lose sight of the key.
     BackHandler { }
-    val groups = state.recoveryKey?.split("-").orEmpty()
 
     SetupFrame(step = 1, onBack = null) {
         Text("Your recovery key.", style = PrismType.title, color = Prism.Paper)
         Spacer(Modifier.height(12.dp))
         Text(
-            "If you forget your passphrase, this key is the only way back in. Write it on paper and keep it somewhere safe. Never photograph it.",
+            "If you forget your passphrase, this key is the only way back in, and Obscura can't show it again. Write it on paper or save it as a password-protected PDF to print. Never photograph it.",
             style = PrismType.body,
             color = Prism.Muted,
         )
         Spacer(Modifier.height(22.dp))
-        Column(Modifier.fillMaxWidth().prismBlock(Prism.Pink).padding(16.dp)) {
-            groups.chunked(2).forEachIndexed { row, pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pair.forEachIndexed { col, group ->
-                        Row(
-                            Modifier.weight(1f).prismBlock(Prism.Ink, 14).padding(horizontal = 12.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("%02d".format(row * 2 + col + 1), style = PrismType.label, color = Prism.Muted)
-                            Spacer(Modifier.width(10.dp))
-                            Text(if (revealed) group else "••••", style = PrismType.heading.copy(fontFamily = PrismType.label.fontFamily, letterSpacing = PrismType.label.letterSpacing), color = Prism.Paper)
-                        }
-                    }
-                }
-                if (row < 3) Spacer(Modifier.height(8.dp))
-            }
+        state.recoveryKey?.let { key ->
+            RecoveryKeyBlock(key)
             Spacer(Modifier.height(12.dp))
-            Surface(
-                onClick = { revealed = !revealed },
-                shape = RoundedCornerShape(16.dp),
-                color = Prism.Ink,
-                contentColor = Prism.Pink,
-                modifier = Modifier.fillMaxWidth().height(46.dp),
-            ) {
-                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (revealed) "Hide key" else "Show key", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight))
-                }
-            }
+            SaveRecoveryPdf(key)
         }
         Spacer(Modifier.height(20.dp))
         Row(
@@ -293,7 +271,7 @@ fun RecoveryKeyScreen(viewModel: SetupViewModel, onContinue: () -> Unit) {
                 colors = CheckboxDefaults.colors(checkedColor = Prism.Sun, checkmarkColor = Prism.Ink, uncheckedColor = Prism.Muted),
             )
             Spacer(Modifier.width(8.dp))
-            Text("I've written this key down safely", style = PrismType.body, color = Prism.Paper)
+            Text("I've written this key down or saved the PDF", style = PrismType.body, color = Prism.Paper)
         }
         Spacer(Modifier.height(28.dp))
         PillButton(

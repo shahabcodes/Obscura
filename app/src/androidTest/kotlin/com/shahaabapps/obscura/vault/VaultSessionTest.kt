@@ -165,7 +165,38 @@ class VaultSessionTest {
         session.setPin("246810".toCharArray())
         session.lock()
         binding.delete()
-        assertTrue(newSession().unlockWithPin("246810".toCharArray()) is UnlockResult.Failed)
+        val again = newSession()
+        val result = again.unlockWithPin("246810".toCharArray())
+        assertTrue(result is UnlockResult.Failed)
+        assertTrue((result as UnlockResult.Failed).message.contains("Use your passphrase"))
+        // The dead PIN is forgotten, so the lock screen falls back to the passphrase…
+        assertFalse(again.hasPin())
+        // …and it was not a guess: no attempt was counted.
+        assertEquals(UnlockResult.Wrong(3), again.unlockWithPassphrase("wrong".toCharArray()))
+        assertEquals(UnlockResult.Success, again.unlockWithPassphrase("passphrase".toCharArray()))
+    }
+
+    @Test
+    fun aNewRecoveryKeyNeedsThePassphraseAndReplacesTheOldOne() = runTest {
+        val session = newSession()
+        val original = session.create("passphrase".toCharArray()).format()
+
+        val (wrong, none) = session.newRecoveryKey("nope".toCharArray())
+        assertEquals(UnlockResult.Wrong(3), wrong)
+        assertEquals(null, none)
+
+        val (ok, fresh) = session.newRecoveryKey("passphrase".toCharArray())
+        assertEquals(UnlockResult.Success, ok)
+        val key = fresh!!.format()
+        assertFalse(key == original)
+        session.lock()
+
+        val again = newSession()
+        assertTrue(again.unlockWithRecoveryKey(original) is UnlockResult.Wrong)
+        assertEquals(UnlockResult.Success, again.unlockWithRecoveryKey(key))
+        // The passphrase is unchanged, and the PDF guard recognises it.
+        assertTrue(again.isVaultPassphrase("passphrase".toCharArray()))
+        assertFalse(again.isVaultPassphrase("something else".toCharArray()))
     }
 
     @Test

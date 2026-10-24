@@ -18,11 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.components.SecretField
@@ -104,7 +105,7 @@ fun AlbumsScreen(onOpenAlbum: (String) -> Unit, viewModel: AlbumsViewModel = hil
         val list = albums
         if (list != null && list.isEmpty() && !creating) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Text("No albums yet. Create one, then add photos and videos from the viewer.", style = PrismType.body, color = Prism.Muted, modifier = Modifier.padding(top = 20.dp))
+                EmptyState("No albums yet.", Modifier.padding(top = 12.dp), text = "Create one, then add photos and videos from the viewer.")
             }
         }
         items(list.orEmpty(), key = { it.id }) { album ->
@@ -201,7 +202,7 @@ fun AlbumScreen(id: String, onBack: () -> Unit, onOpenFile: (VaultFile) -> Unit,
                     }
                     TextButton(onClick = { confirmDelete = true }) { Text("Delete album (files stay in the vault)", color = Prism.Orange, style = PrismType.body) }
                 }
-                if (files.isEmpty()) Text("Empty. Open a photo or video and tap Album to add it here.", style = PrismType.body, color = Prism.Muted)
+                if (files.isEmpty()) EmptyState("This album is empty.", text = "Open a photo or video and tap Album to add it here.")
             }
         }
         items(files, key = { it.id }) { file ->

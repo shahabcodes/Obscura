@@ -59,6 +59,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.DecryptingIndicator
+import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.components.prismBlock
@@ -146,7 +148,9 @@ fun GalleryScreen(
         }
 
         Box(Modifier.weight(1f)) {
-            if (!state.loading && state.flat.isEmpty()) {
+            if (state.loading) {
+                DecryptingIndicator(Modifier.fillMaxSize())
+            } else if (state.flat.isEmpty()) {
                 EmptyGallery(if (state.totalMedia == 0) "No photos or videos yet." else "Nothing matches this filter.", onImport, showImport = state.totalMedia == 0)
             } else {
                 LazyVerticalGrid(
@@ -242,12 +246,11 @@ private fun MonthHeader(header: GalleryEntry.Header) {
 
 @Composable
 private fun EmptyGallery(text: String, onImport: () -> Unit, showImport: Boolean) {
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text, style = PrismType.heading, color = Prism.Paper)
-        if (showImport) {
-            Spacer(Modifier.height(18.dp))
-            PillButton("Import photos & videos", onClick = onImport)
-        }
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+        EmptyState(
+            title = text,
+            action = if (showImport) ({ PillButton("Import photos & videos", onClick = onImport) }) else null,
+        )
     }
 }
 

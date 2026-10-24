@@ -1,7 +1,11 @@
 package com.shahaabapps.obscura.backup
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import java.io.File
@@ -31,6 +35,8 @@ interface BackupDir {
     /** Creates or overwrites a file. */
     fun write(name: String): OutputStream
     fun delete(name: String)
+    /** Free space at the destination, or null when it can't be told. */
+    fun availableBytes(): Long? = null
 }
 
 /** Plain-directory destination, used by tests and as a reference implementation. */
@@ -60,22 +66,26 @@ class FileBackupDir(private val dir: File) : BackupDir {
     override fun delete(name: String) {
         File(dir, name).deleteRecursively()
     }
+
+    override fun availableBytes(): Long = dir.usableSpace
 }
 
 /** Storage Access Framework destination: a folder or USB drive the user picked. */
 class SafBackupDir(
-    private val resolver: ContentResolver,
+    private val context: Context,
     private val treeUri: Uri,
     private val documentId: String = DocumentsContract.getTreeDocumentId(treeUri),
     override val name: String = "",
 ) : BackupDir {
+
+    private val resolver: ContentResolver get() = context.contentResolver
 
     private val columns = arrayOf(Document.COLUMN_DOCUMENT_ID, Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE, Document.COLUMN_SIZE)
 
     private inner class Node(val id: String, override val name: String, mime: String, override val size: Long) : BackupNode {
         override val isDirectory = mime == Document.MIME_TYPE_DIR
         val uri: Uri get() = DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
-        override fun asDirectory(): BackupDir = SafBackupDir(resolver, treeUri, id, name)
+        override fun asDirectory(): BackupDir = SafBackupDir(context, treeUri, id, name)
         override fun read(): InputStream = resolver.openInputStream(uri) ?: throw FileNotFoundException(name)
     }
 
@@ -96,7 +106,7 @@ class SafBackupDir(
         (child(name) as? Node)?.takeIf { it.isDirectory }?.let { return it.asDirectory() }
         val created = DocumentsContract.createDocument(resolver, parentUri, Document.MIME_TYPE_DIR, name)
             ?: throw FileNotFoundException("Could not create folder $name")
-        return SafBackupDir(resolver, treeUri, DocumentsContract.getDocumentId(created), name)
+        return SafBackupDir(context, treeUri, DocumentsContract.getDocumentId(created), name)
     }
 
     override fun write(name: String): OutputStream {
@@ -111,4 +121,20 @@ class SafBackupDir(
     override fun delete(name: String) {
         (child(name) as? Node)?.let { DocumentsContract.deleteDocument(resolver, it.uri) }
     }
+
+    /**
+     * Free space of the volume behind the picked folder. Phone storage and USB drives come from
+     * the external storage provider, whose document ids start with the volume ("primary:…" or a
+     * drive id like "1A2B-3C4D:…"); other providers don't say, and the copy simply runs.
+     */
+    override fun availableBytes(): Long? = runCatching {
+        if (treeUri.authority != "com.android.externalstorage.documents") return@runCatching null
+        val volume = DocumentsContract.getTreeDocumentId(treeUri).substringBefore(':')
+        val storage = context.getSystemService(StorageManager::class.java)
+        val match = storage.storageVolumes.firstOrNull { if (volume == "primary") it.isPrimary else it.uuid.equals(volume, ignoreCase = true) }
+            ?: return@runCatching null
+        val dir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) match.directory
+        else if (match.isPrimary) Environment.getExternalStorageDirectory() else File("/storage/$volume")
+        dir?.usableSpace?.takeIf { it > 0 }
+    }.getOrNull()
 }

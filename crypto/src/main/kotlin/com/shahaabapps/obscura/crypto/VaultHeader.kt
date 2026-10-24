@@ -40,6 +40,8 @@ class VaultHeader(
         kdfParams: KdfParams = this.kdfParams,
         passphraseSalt: ByteArray = this.passphraseSalt,
         masterByPassphrase: ByteArray = this.masterByPassphrase,
+        recoverySalt: ByteArray = this.recoverySalt,
+        masterByRecovery: ByteArray = this.masterByRecovery,
     ) = VaultHeader(vaultId, kdfParams, passphraseSalt, masterByPassphrase, recoverySalt, masterByRecovery)
 
     companion object {

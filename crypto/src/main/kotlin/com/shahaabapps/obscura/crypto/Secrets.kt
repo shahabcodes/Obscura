@@ -10,6 +10,12 @@ class WrongSecretException(message: String = "The secret does not unlock this va
 /** Thrown when stored vault data is malformed or has been tampered with. */
 class CorruptVaultException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
+/**
+ * Thrown when a device-bound key in the Android Keystore is gone (the app was reinstalled with
+ * its data kept, or the phone's key store was reset). The data it protected can't be opened here.
+ */
+class DeviceKeyLostException(message: String) : Exception(message)
+
 internal val secureRandom: SecureRandom by lazy { SecureRandom() }
 
 internal fun randomBytes(size: Int, random: SecureRandom = secureRandom): ByteArray =

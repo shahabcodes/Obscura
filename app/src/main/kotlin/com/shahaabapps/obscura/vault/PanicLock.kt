@@ -12,6 +12,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.shahaabapps.obscura.importer.ImportManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -24,9 +27,14 @@ class FlipDetector {
     private var faceDownSince: Long? = null
     private var fired = false
 
+    /** Whether the last reading was face-down, regardless of how long. */
+    var isFaceDown = false
+        private set
+
     /** Feed accelerometer readings; returns true exactly once per face-down event. */
     fun onReading(x: Float, y: Float, z: Float, timeMs: Long): Boolean {
         val faceDown = z < -FACE_DOWN_Z && abs(x) < FLAT_TOLERANCE && abs(y) < FLAT_TOLERANCE
+        isFaceDown = faceDown
         if (!faceDown) {
             faceDownSince = null
             fired = false
@@ -68,6 +76,22 @@ class PanicLock @Inject constructor(
 
     val available: Boolean get() = accelerometer != null
 
+    private val _faceDown = MutableStateFlow(false)
+    private val _panicked = MutableStateFlow(false)
+
+    /** The phone is lying face-down right now (only known while Obscura is on screen). */
+    val faceDown: StateFlow<Boolean> = _faceDown.asStateFlow()
+
+    /**
+     * True after a panic lock until the lock screen has shown it. The lock screen waits for the
+     * phone to be face-up again, so the confirmation is seen rather than played into the table.
+     */
+    val panicked: StateFlow<Boolean> = _panicked.asStateFlow()
+
+    fun acknowledge() {
+        _panicked.value = false
+    }
+
     fun start() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
     }
@@ -91,16 +115,20 @@ class PanicLock @Inject constructor(
         if (!listening) return
         sensors?.unregisterListener(this)
         listening = false
+        _faceDown.value = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (detector.onReading(event.values[0], event.values[1], event.values[2], event.timestamp / 1_000_000)) trigger()
+        val fired = detector.onReading(event.values[0], event.values[1], event.values[2], event.timestamp / 1_000_000)
+        _faceDown.value = detector.isFaceDown
+        if (fired) trigger()
     }
 
     /** Locks immediately. Exposed so tests can simulate the flip. */
     fun trigger() = main.post {
         if (session.openVault == null) return@post
         importManager.cancel()
+        _panicked.value = true
         session.lock()
     }
 

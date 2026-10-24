@@ -44,7 +44,7 @@ class KeystoreBinding(private val alias: String = "obscura.pin.v1") : DeviceBind
 
     private fun existingKey(): SecretKey =
         (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.secretKey
-            ?: throw CorruptVaultException("Device key for PIN is missing")
+            ?: throw DeviceKeyLostException("Device key for PIN is missing")
 
     private fun key(): SecretKey =
         (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.secretKey ?: generate()

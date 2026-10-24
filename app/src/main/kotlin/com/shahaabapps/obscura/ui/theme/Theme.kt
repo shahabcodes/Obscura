@@ -5,10 +5,14 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.shahaabapps.obscura.R
 
 /** Prism palette: black ground, bold block colours, one accent at a time. */
 object Prism {
@@ -26,13 +30,24 @@ object Prism {
 }
 
 /**
- * Display and label styles. System families stand in for Space Grotesk and JetBrains Mono
- * until the OFL font files are bundled under res/font (fonts must ship in the APK, never
- * be downloaded, because the app has no network access).
+ * Display and label styles: Space Grotesk (one variable font file, weights 300–700) and
+ * JetBrains Mono. Both are bundled under res/font with their OFL licences in assets/licences;
+ * fonts are never downloaded, because the app has no network access.
  */
 object PrismType {
-    private val Display = FontFamily.SansSerif
-    private val Mono = FontFamily.Monospace
+    // The variation-settings overload is still marked experimental; it sets the variable font's weight axis.
+    @OptIn(ExperimentalTextApi::class)
+    private fun grotesk(weight: Int) =
+        Font(R.font.space_grotesk, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
+
+    private val Display = FontFamily(grotesk(400), grotesk(500), grotesk(600), grotesk(700))
+    private val Mono = FontFamily(
+        Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
+        Font(R.font.jetbrains_mono_semibold, FontWeight.SemiBold),
+    )
+
+    /** For text outside the named styles, such as Material defaults. */
+    val displayFamily: FontFamily get() = Display
 
     val hero = TextStyle(fontFamily = Display, fontWeight = FontWeight.Bold, fontSize = 44.sp, lineHeight = 44.sp, letterSpacing = (-1.6).sp)
     val title = TextStyle(fontFamily = Display, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 34.sp, letterSpacing = (-1.1).sp)
@@ -65,14 +80,27 @@ private val PrismColors = darkColorScheme(
 fun ObscuraTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = PrismColors,
-        typography = Typography(
-            displayLarge = PrismType.hero,
-            headlineMedium = PrismType.title,
-            titleLarge = PrismType.heading,
-            bodyLarge = PrismType.body,
-            labelLarge = PrismType.button,
-            labelSmall = PrismType.label,
-        ),
+        // Every Material slot gets Space Grotesk, so default component text matches the named styles.
+        typography = Typography().let { base ->
+            val family = PrismType.displayFamily
+            base.copy(
+                displayLarge = PrismType.hero,
+                displayMedium = base.displayMedium.copy(fontFamily = family),
+                displaySmall = base.displaySmall.copy(fontFamily = family),
+                headlineLarge = base.headlineLarge.copy(fontFamily = family),
+                headlineMedium = PrismType.title,
+                headlineSmall = base.headlineSmall.copy(fontFamily = family),
+                titleLarge = PrismType.heading,
+                titleMedium = base.titleMedium.copy(fontFamily = family),
+                titleSmall = base.titleSmall.copy(fontFamily = family),
+                bodyLarge = PrismType.body,
+                bodyMedium = base.bodyMedium.copy(fontFamily = family),
+                bodySmall = base.bodySmall.copy(fontFamily = family),
+                labelLarge = PrismType.button,
+                labelMedium = base.labelMedium.copy(fontFamily = family),
+                labelSmall = PrismType.label,
+            )
+        },
         content = content,
     )
 }

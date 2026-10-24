@@ -8,6 +8,47 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-24
+
+### Added
+- Save your recovery key as a password-protected PDF, both at setup and later:
+  - The PDF is encrypted with the PDF standard's strongest protection (AES-256, revision 6). Any PDF viewer can open it, but only with the password you choose when saving. Without it, the file is ciphertext.
+  - It holds a printable A4 page: the key in large type, a short vault fingerprint so you can tell vaults apart, the date, how to store it, and how to use it.
+  - Printing is allowed; editing and copying text out are not. Your vault passphrase is refused as the PDF password, because the page has to work when that passphrase is forgotten.
+  - Save it anywhere through Android's picker: Downloads, a USB drive or a folder. The vault stays open while the picker is up.
+- Security → Recovery key → Create a new recovery key. Recovery keys are never stored, so the one shown at setup can't be shown again; if you skipped saving it, this is how you get one. It needs your passphrase (wrong guesses count toward the lockout), the old key stops working at once, and your passphrase, PIN and fingerprint stay the same.
+- The Prism motion kit: eight Lottie animations, bundled in the app (about 70 KB, nothing downloaded):
+  - Unlock: the shackle swings open after a PIN, passphrase or fingerprint unlock.
+  - Panic lock: a pink "Locked instantly." confirmation once the phone is face-up again.
+  - Sealing: a file dropping into the vault during imports, backups and other waits.
+  - Scan: a radar sweep while finding duplicates and checking a backup.
+  - Success: when space is freed, a backup is done or an import finishes.
+  - Empty states: floating shapes on every empty list.
+  - Decrypting: shimmering tiles while photos and PDFs decrypt.
+  - Heart burst: favourites in the reel and the viewer.
+  - With the system's "remove animations" setting on, each shows a still frame instead.
+- The real Prism fonts: Space Grotesk for text and JetBrains Mono for labels, bundled in the app.
+- Security → About → Open-source licences, with the full licence texts bundled so it works offline.
+
+### Changed
+- Other apps can no longer draw over Obscura (Android 12+), so nothing can cover the PIN pad or fake a prompt. Older versions ignore touches that arrive while another window covers the app.
+- On Android 14+, only genuine assistive tools such as TalkBack can read Obscura's screen; other accessibility services can't scrape file names or your recovery key.
+- Uninstalling now asks whether to keep the encrypted vault, so a mistaken uninstall doesn't erase it (not kept unless you tick the box).
+- Backups check free space before copying anything, and remove shredded files first to make room. Restores check the phone has room.
+
+### Fixed
+- Shredding a file while a backup ran made the backup fail with a misleading "drive isn't available" message. Such files are now simply left out.
+- A drive formatted as FAT32 now explains that it can't hold files over 4 GB instead of failing with a generic error.
+- If Android loses the PIN's device key (for example after reinstalling with data kept), the PIN is switched off and the lock screen asks for your passphrase, instead of showing an error. This doesn't count as a wrong attempt.
+
+### Tests
+- 101 unit tests and 72 on-device tests, including:
+  - The recovery-key PDF opened with an independent PDF reader (Apache PDFBox, tests only): it opens only with the right password, uses AES-256 revision 6, carries the key and blocks editing.
+  - Creating a new recovery key, and the PDF password rules in the UI.
+  - Every animation parsed and drawn by Lottie, with colours checked where the design fixes them.
+  - Free-space checks, files shredded during a backup, and the lost-PIN-key fallback.
+- Real fingerprint unlock on the emulator, with emulated fingers: enrolment, the wrong finger refused, the right finger unlocking, and fingerprint unlock switching itself off after a new fingerprint is added to the phone.
+
 ## [0.8.0] - 2026-10-23
 
 ### Added
@@ -165,7 +206,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/shahabcodes/Obscura/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/shahabcodes/Obscura/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/shahabcodes/Obscura/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/shahabcodes/Obscura/compare/v0.5.0...v0.6.0

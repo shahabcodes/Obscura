@@ -64,7 +64,7 @@ import com.shahaabapps.obscura.ui.theme.PrismType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SecurityScreen(onBackup: () -> Unit = {}, viewModel: SecurityViewModel = hiltViewModel()) {
+fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRecoveryKey: () -> Unit = {}, viewModel: SecurityViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var changingPassphrase by remember { mutableStateOf(false) }
@@ -188,6 +188,13 @@ fun SecurityScreen(onBackup: () -> Unit = {}, viewModel: SecurityViewModel = hil
             }
         }
 
+        Section("RECOVERY KEY") {
+            Text("Recovery key", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper)
+            Text("Lost it, or never saved it? Make a new one and save it as a protected PDF. The old key stops working.", style = PrismType.label, color = Prism.Muted)
+            Spacer(Modifier.height(10.dp))
+            GhostButton("Create a new recovery key", onClick = onRecoveryKey)
+        }
+
         Section("BACKUP") {
             Text("Encrypted backup", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper)
             Text(
@@ -217,6 +224,8 @@ fun SecurityScreen(onBackup: () -> Unit = {}, viewModel: SecurityViewModel = hil
             AboutRow("Files", "AES-256-GCM, a separate key for each")
             AboutRow("Passphrase", "Argon2id, 64 MB, 3 passes")
             AboutRow("Index", "SQLCipher, key derived from the vault")
+            Spacer(Modifier.height(10.dp))
+            GhostButton("Open-source licences", onClick = onLicences)
         }
     }
 

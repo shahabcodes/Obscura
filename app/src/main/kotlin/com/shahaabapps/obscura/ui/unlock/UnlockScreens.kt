@@ -2,7 +2,9 @@ package com.shahaabapps.obscura.ui.unlock
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -23,11 +25,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -38,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.Motion
+import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.PinDots
 import com.shahaabapps.obscura.ui.components.PinPad
@@ -48,6 +56,7 @@ import com.shahaabapps.obscura.ui.components.showBiometricPrompt
 import com.shahaabapps.obscura.ui.setup.SealingIndicator
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
+import kotlinx.coroutines.delay
 
 /** Main lock screen: PIN pad when a PIN exists, otherwise a passphrase field. Fingerprint when enrolled. */
 @Composable
@@ -69,7 +78,7 @@ fun UnlockScreen(
             subtitle = "Touch the fingerprint sensor",
             negativeText = if (state.hasPin) "Use PIN" else "Use passphrase",
             cipher = cipher,
-            onSuccess = { viewModel.onBiometricAuthorized(it, onUnlocked) },
+            onSuccess = { viewModel.onBiometricAuthorized(it) },
             onFailure = { message -> if (message != null) viewModel.onBiometricError(message) },
         )
     }
@@ -79,11 +88,23 @@ fun UnlockScreen(
         if (state.biometricAvailable && !state.lockedOut) promptFingerprint()
     }
 
-    if (!state.hasPin) {
-        PassphraseUnlockContent(state, viewModel, onUnlocked, onBack = null, onUseRecovery = onUseRecovery, onFingerprint = if (state.biometricAvailable) ::promptFingerprint else null)
-        return
+    UnlockLayers(state, viewModel, onUnlocked) {
+        if (!state.hasPin) {
+            PassphraseUnlockContent(state, viewModel, onBack = null, onUseRecovery = onUseRecovery, onFingerprint = if (state.biometricAvailable) ::promptFingerprint else null)
+        } else {
+            PinUnlockContent(state, viewModel, onUsePassphrase, onUseRecovery, onFingerprint = if (state.biometricAvailable) ::promptFingerprint else null)
+        }
     }
+}
 
+@Composable
+private fun PinUnlockContent(
+    state: UnlockUiState,
+    viewModel: UnlockViewModel,
+    onUsePassphrase: () -> Unit,
+    onUseRecovery: () -> Unit,
+    onFingerprint: (() -> Unit)?,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -106,9 +127,9 @@ fun UnlockScreen(
             Message(state.message)
             Spacer(Modifier.height(12.dp))
             PinPad(
-                onDigit = { viewModel.onPinDigit(it, onUnlocked) },
+                onDigit = { viewModel.onPinDigit(it) },
                 onDelete = viewModel::onPinDelete,
-                onBiometric = if (state.biometricAvailable) ::promptFingerprint else null,
+                onBiometric = onFingerprint,
                 enabled = !state.busy,
             )
         }
@@ -128,14 +149,15 @@ fun PassphraseUnlockScreen(
     viewModel: UnlockViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    PassphraseUnlockContent(state, viewModel, onUnlocked, onBack, onUseRecovery, onFingerprint = null)
+    UnlockLayers(state, viewModel, onUnlocked) {
+        PassphraseUnlockContent(state, viewModel, onBack, onUseRecovery, onFingerprint = null)
+    }
 }
 
 @Composable
 private fun PassphraseUnlockContent(
     state: UnlockUiState,
     viewModel: UnlockViewModel,
-    onUnlocked: () -> Unit,
     onBack: (() -> Unit)?,
     onUseRecovery: () -> Unit,
     onFingerprint: (() -> Unit)?,
@@ -153,7 +175,7 @@ private fun PassphraseUnlockContent(
                 value = state.passphrase,
                 onValueChange = viewModel::onPassphrase,
                 accent = if (state.wrong) Prism.Orange else Prism.Line,
-                onImeAction = { viewModel.submitPassphrase(onUnlocked) },
+                onImeAction = viewModel::submitPassphrase,
             )
             Spacer(Modifier.height(10.dp))
             Message(state.message)
@@ -161,7 +183,7 @@ private fun PassphraseUnlockContent(
             if (state.busy) {
                 SealingIndicator("Unlocking…")
             } else {
-                PillButton("Unlock", onClick = { viewModel.submitPassphrase(onUnlocked) })
+                PillButton("Unlock", onClick = viewModel::submitPassphrase)
             }
             if (onFingerprint != null) {
                 Spacer(Modifier.height(10.dp))
@@ -184,6 +206,11 @@ fun RecoveryUnlockScreen(
     viewModel: UnlockViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    UnlockLayers(state, viewModel, onUnlocked) { RecoveryContent(state, viewModel, onBack) }
+}
+
+@Composable
+private fun RecoveryContent(state: UnlockUiState, viewModel: UnlockViewModel, onBack: () -> Unit) {
     UnlockFrame(onBack) {
         Text("Use your recovery key.", style = PrismType.title, color = Prism.Paper)
         Spacer(Modifier.height(12.dp))
@@ -204,14 +231,64 @@ fun RecoveryUnlockScreen(
                 revealable = false,
                 keyboardType = KeyboardType.Ascii,
                 accent = if (state.wrong) Prism.Orange else Prism.Line,
-                onImeAction = { viewModel.submitRecovery(onUnlocked) },
+                onImeAction = viewModel::submitRecovery,
             )
             Spacer(Modifier.height(10.dp))
             Message(state.message)
             Spacer(Modifier.height(20.dp))
-            if (state.busy) SealingIndicator("Unlocking…") else PillButton("Unlock", onClick = { viewModel.submitRecovery(onUnlocked) })
+            if (state.busy) SealingIndicator("Unlocking…") else PillButton("Unlock", onClick = viewModel::submitRecovery)
         }
     }
+}
+
+/**
+ * Puts the unlock and panic animations over an unlock screen. After a successful unlock the
+ * shackle animation plays, then [onUnlocked] runs. After a panic lock, once the phone is face-up
+ * again, a short pink confirmation shows that the vault locked.
+ */
+@Composable
+private fun UnlockLayers(state: UnlockUiState, viewModel: UnlockViewModel, onUnlocked: () -> Unit, content: @Composable () -> Unit) {
+    val panicNotice by viewModel.panicNotice.collectAsStateWithLifecycle()
+    Box(Modifier.fillMaxSize()) {
+        content()
+        when {
+            state.unlocked -> Overlay(Prism.Ink) {
+                MotionArt(Motion.UNLOCK, Modifier.size(176.dp), onFinished = onUnlocked)
+                Spacer(Modifier.height(8.dp))
+                Text("Unlocked.", style = PrismType.title, color = Prism.Paper)
+            }
+            panicNotice -> {
+                var played by remember { mutableStateOf(false) }
+                LaunchedEffect(played) {
+                    if (played) {
+                        delay(700)
+                        viewModel.panicShown()
+                    }
+                }
+                Overlay(Prism.Pink, onTap = viewModel::panicShown) {
+                    MotionArt(Motion.PANIC, Modifier.size(176.dp), onFinished = { played = true })
+                    Spacer(Modifier.height(8.dp))
+                    Text("Locked instantly.", style = PrismType.title, color = Prism.Ink)
+                    Text("Panic lock", style = PrismType.label, color = Prism.Ink)
+                }
+            }
+        }
+    }
+}
+
+/** Full-screen layer that swallows touches, so nothing underneath is pressed by accident. */
+@Composable
+private fun Overlay(color: androidx.compose.ui.graphics.Color, onTap: () -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(color)
+            .pointerInput(Unit) { detectTapGestures { onTap() } }
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        content = content,
+    )
 }
 
 @Composable

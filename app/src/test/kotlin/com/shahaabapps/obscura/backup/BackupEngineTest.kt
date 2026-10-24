@@ -122,6 +122,78 @@ class BackupEngineTest {
         assertTrue(engine.holdsOtherVault(dest))
     }
 
+    /** Wraps a folder to fake its free space and to run [beforeWrite] before each file write. */
+    private class TestDrive(
+        private val inner: BackupDir,
+        private val free: Long? = null,
+        private val beforeWrite: (String) -> Unit = {},
+    ) : BackupDir by inner {
+        override fun directory(name: String): BackupDir = TestDrive(inner.directory(name), free, beforeWrite)
+        override fun child(name: String): BackupNode? = inner.child(name)?.let { node ->
+            if (!node.isDirectory) node else object : BackupNode by node {
+                override fun asDirectory(): BackupDir = TestDrive(node.asDirectory(), free, beforeWrite)
+            }
+        }
+        override fun write(name: String): java.io.OutputStream {
+            beforeWrite(name)
+            return inner.write(name)
+        }
+        override fun availableBytes(): Long? = free
+    }
+
+    @Test
+    fun aFullDriveIsReportedBeforeAnythingIsCopied() {
+        val v = vault()
+        val usb = temp.newFolder("usb")
+        try {
+            BackupEngine(v).backup(TestDrive(FileBackupDir(usb), free = 1_000), {}) { }
+            org.junit.Assert.fail("expected the drive to be too small")
+        } catch (e: BackupSpaceException) {
+            // 6,000 bytes of blobs, a 4,096-byte index, a thumbnail and the header don't fit in 1,000.
+            assertTrue(e.missingBytes > 9_000)
+        }
+        assertFalse("no blob was copied", File(usb, "Obscura Backup/blobs").exists())
+    }
+
+    @Test
+    fun spaceFreedByShreddedFilesCounts() {
+        val v = vault()
+        val usb = FileBackupDir(temp.newFolder("usb"))
+        BackupEngine(v).backup(usb, {}) { }
+        File(v, "blobs/cd/cd56").delete() // frees 3,000 bytes on the drive
+        blob(v, "ef78", 2_500)
+        val result = BackupEngine(v).backup(TestDrive(usb, free = 100), {}) { }
+        assertEquals(1, result.copied)
+        assertTrue(BackupEngine(v).verify(usb).ok)
+    }
+
+    @Test
+    fun aFileShreddedDuringTheBackupIsLeftOut() {
+        val v = vault()
+        val usb = FileBackupDir(temp.newFolder("usb"))
+        val victim = File(v, "blobs/cd/cd56")
+        val result = BackupEngine(v).backup(TestDrive(usb, beforeWrite = { if (it == "ab12") victim.delete() }), {}) { }
+        assertEquals(1, result.skipped)
+        assertEquals(3, result.copied)
+        assertFalse(File(temp.root, "usb/Obscura Backup/blobs/cd/cd56").exists())
+        assertTrue("still a complete backup", File(temp.root, "usb/Obscura Backup/obscura-backup.json").isFile)
+        assertTrue(BackupEngine(v).verify(usb).ok)
+    }
+
+    @Test
+    fun aRefusedWriteOfASmallFileIsNotBlamedOnFat32() {
+        val v = vault()
+        val failing = TestDrive(FileBackupDir(temp.newFolder("usb")), beforeWrite = { if (it == "ab34") throw java.io.IOException("I/O error") })
+        try {
+            BackupEngine(v).backup(failing, {}) { }
+            org.junit.Assert.fail("expected the write to fail")
+        } catch (e: FileTooLargeForDriveException) {
+            org.junit.Assert.fail("a 2 KB file can't hit the 4 GB limit")
+        } catch (e: java.io.IOException) {
+            assertEquals("I/O error", e.message)
+        }
+    }
+
     @Test
     fun restoreAcceptsTheBackupFolderOrItsParent() {
         val v = vault()

@@ -31,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.DeleteForever
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +53,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.DecryptingIndicator
+import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.gallery.ShredDialog
@@ -87,11 +88,7 @@ fun DocumentsScreen(viewModel: LibraryViewModel, onBack: () -> Unit, onOpen: (St
             }
         }
         if (library.loaded && docs.isEmpty()) {
-            Column(Modifier.padding(24.dp)) {
-                Text("No documents yet.", style = PrismType.heading, color = Prism.Paper)
-                Spacer(Modifier.height(14.dp))
-                PillButton("Import files", onClick = onImport)
-            }
+            EmptyState("No documents yet.", Modifier.padding(24.dp), action = { PillButton("Import files", onClick = onImport) })
             return@Column
         }
         Row(Modifier.padding(horizontal = 16.dp).clip(CircleShape).background(Prism.Surface).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -231,9 +228,7 @@ private fun TextView(file: VaultFile, viewModel: LibraryViewModel) {
 
 @Composable
 private fun Loading() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = Prism.Sun, strokeWidth = 3.dp)
-    }
+    DecryptingIndicator(Modifier.fillMaxSize())
 }
 
 @Composable

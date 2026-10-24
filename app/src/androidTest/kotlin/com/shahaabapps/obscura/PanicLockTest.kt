@@ -9,13 +9,13 @@ import com.shahaabapps.obscura.importer.ImportSource
 import com.shahaabapps.obscura.vault.VaultEntryPoint
 import com.shahaabapps.obscura.vault.VaultState
 import dagger.hilt.android.EntryPointAccessors
+import java.io.InputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.InputStream
 
 /** Panic lock locks at once, even in the middle of an import that holds the vault open. */
 @RunWith(AndroidJUnit4::class)
@@ -51,6 +51,7 @@ class PanicLockTest {
 
     @After
     fun tearDown() {
+        entry.panicLock().acknowledge()
         entry.importManager().reset()
         wipe()
     }
@@ -59,6 +60,18 @@ class PanicLockTest {
     fun panicLocksImmediately() {
         entry.panicLock().trigger()
         assertTrue(waitFor { entry.session().state.value is VaultState.Locked })
+        // The lock screen is told to confirm the panic lock, once.
+        assertTrue(entry.panicLock().panicked.value)
+        entry.panicLock().acknowledge()
+        assertTrue(!entry.panicLock().panicked.value)
+    }
+
+    @Test
+    fun noPanicNoticeWhenAlreadyLocked() {
+        entry.session().lock()
+        entry.panicLock().trigger()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        assertTrue(!entry.panicLock().panicked.value)
     }
 
     @Test
