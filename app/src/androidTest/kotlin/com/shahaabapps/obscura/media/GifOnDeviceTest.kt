@@ -122,18 +122,26 @@ class GifOnDeviceTest {
         quantizer.sample(source)
         val palette = quantizer.palette()
         val indices = ByteArray(source.size)
-        Quantizer.Mapper(palette).map(source, indices)
+        Quantizer.Mapper(palette).map(source, width, indices)
 
         val bitmap = firstFrame(encode(width, height, palette, listOf(indices)))
         var worst = 0
+        var total = 0L
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val expected = source[y * width + x]
                 val actual = bitmap.getPixel(x, y)
                 fun channel(shift: Int) = abs(((expected shr shift) and 0xFF) - ((actual shr shift) and 0xFF))
-                worst = maxOf(worst, maxOf(channel(16), maxOf(channel(8), channel(0))))
+                val off = maxOf(channel(16), maxOf(channel(8), channel(0)))
+                worst = maxOf(worst, off)
+                total += off
             }
         }
-        assertTrue("worst channel was off by $worst", worst <= 24)
+        // Dithering trades single pixels for the whole: one pixel may be pushed well off its own
+        // colour so that its neighbourhood averages out to the shade that was really there. So
+        // the average is what must stay tight, while a lone pixel is allowed to stray.
+        val average = total.toDouble() / (width * height)
+        assertTrue("average channel was off by $average", average <= 8.0)
+        assertTrue("worst channel was off by $worst", worst <= 64)
     }
 }

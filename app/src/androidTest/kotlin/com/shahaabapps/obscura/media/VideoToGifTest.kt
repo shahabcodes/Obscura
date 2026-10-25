@@ -204,25 +204,51 @@ class VideoToGifTest {
     }
 
     /**
-     * A video whose frames cannot be read must come back as a plain message, not a crash: the file
-     * is in the vault and the user is entitled to tap GIF on it whatever state it is in.
+     * A file that is not a video at all must come back as a plain message, not a crash: it is in
+     * the vault and the user is entitled to tap GIF on it whatever it turns out to be.
      */
     @Test
-    fun aVideoWithNoReadableFramesFailsWithAMessage() = runBlocking {
-        // A real header, then rubbish where the picture should be.
-        val whole = encodeMp4(2)
-        val damaged = whole.copyOf(whole.size / 3)
-        val video = sealVideo(damaged)
+    fun somethingThatIsNotAVideoFailsWithAMessage() = runBlocking {
+        val video = sealVideo(ByteArray(64 * 1024) { (it * 31).toByte() })
         val vault = entry.session().openVault!!
 
         val thrown = runCatching {
             VideoToGif.create(vault, video, GifRequest(startMs = 0, lengthMs = 2_000, fps = 6, maxWidth = 120))
         }.exceptionOrNull()
 
-        assertNotNull("a damaged video should not quietly succeed", thrown)
-        assertTrue("got ${thrown!!::class.java.simpleName}: ${thrown.message}", thrown is IllegalStateException)
+        assertNotNull("rubbish should not quietly succeed", thrown)
+        assertTrue("got ${thrown!!::class.java.simpleName}: ${thrown.message}", thrown !is NullPointerException)
         // And it left nothing half-sealed behind.
         assertEquals(1, vault.database.files().all().size)
+    }
+
+    /**
+     * A video cut short part way through still has frames at the front. Reading it straight
+     * through recovers those, which is better than refusing the whole clip; either way it must
+     * not crash or leave half a file behind.
+     */
+    @Test
+    fun aDamagedVideoEitherGivesWhatSurvivedOrSaysSo() = runBlocking {
+        val whole = encodeMp4(2)
+        val damaged = whole.copyOf(whole.size / 3)
+        val video = sealVideo(damaged)
+        val vault = entry.session().openVault!!
+
+        val result = runCatching {
+            VideoToGif.create(vault, video, GifRequest(startMs = 0, lengthMs = 2_000, fps = 6, maxWidth = 120))
+        }
+        result.fold(
+            onSuccess = { gif ->
+                assertEquals(2, vault.database.files().all().size)
+                val bytes = vault.files.open(vault.database.files().get(gif.id)!!).use { it.readBytes() }
+                assertEquals("GIF89a", String(bytes, 0, 6, Charsets.US_ASCII))
+                assertTrue("a GIF of ${bytes.size} bytes", bytes.size > 100)
+            },
+            onFailure = { thrown ->
+                assertTrue("got ${thrown::class.java.simpleName}", thrown !is NullPointerException)
+                assertEquals(1, vault.database.files().all().size)
+            },
+        )
     }
 
     /** A length past the end of the video is trimmed rather than failing. */

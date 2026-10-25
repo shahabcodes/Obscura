@@ -54,7 +54,7 @@ class GifEncoderTest {
         assertTrue("got ${palette.size}", palette.size in 3..4)
 
         val mapped = ByteArray(pixels.size)
-        Quantizer.Mapper(palette).map(pixels, mapped)
+        Quantizer.Mapper(palette).map(pixels, 30, mapped)
         // Each original colour maps to a palette entry that is close to it.
         for (i in pixels.indices) {
             val chosen = palette[mapped[i].toInt() and 0xFF]

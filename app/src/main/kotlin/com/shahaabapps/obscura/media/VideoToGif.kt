@@ -90,27 +90,28 @@ object VideoToGif {
             val step = (length * 1000) / frames // microseconds between frames
 
             val size = frameSize(retriever, video, request.maxWidth)
-            fun frameAt(index: Int): Bitmap? =
-                retriever.getScaledFrameAtTime(
-                    start * 1000 + index * step,
-                    MediaMetadataRetriever.OPTION_CLOSEST,
-                    size.first,
-                    size.second,
-                )
+            retriever.release()
+            val targets = LongArray(frames) { start * 1000 + it * step }
 
-            // One palette for the whole clip, from frames spread across it.
+            // The whole clip shares one palette, surveyed from frames spread across it, so the
+            // colours do not lurch from frame to frame. Both passes play the video straight
+            // through rather than seeking to each frame, which is the bulk of the time saved.
             val quantizer = Quantizer()
-            val samples = (0 until frames step maxOf(1, frames / 6)).take(6)
+            val wantedForPalette = (0 until frames step maxOf(1, frames / 8)).take(8).toSet()
             var sampled = 0
-            for (index in samples) {
-                coroutineContext.ensureActive()
-                check()
-                val bitmap = frameAt(index) ?: continue
-                quantizer.sample(bitmap.pixels())
-                bitmap.recycle()
-                sampled++
-                onProgress(0.25f * (sampled.toFloat() / samples.size))
-            }
+            VideoFrames(EncryptedMediaDataSource(vault.keys.fileCipher, video, vault.files.blobFile(video.id)))
+                .use { reader ->
+                    reader.read(start * 1000, targets, size.first, size.second) { index, pixels ->
+                        coroutineContext.ensureActive()
+                        check()
+                        if (index in wantedForPalette) {
+                            quantizer.sample(pixels)
+                            sampled++
+                            onProgress(0.25f * (sampled.toFloat() / wantedForPalette.size))
+                        }
+                        true
+                    }
+                }
             check(sampled > 0) { "No frames could be read from this video" }
             val palette = quantizer.palette()
             val mapper = Quantizer.Mapper(palette)
@@ -120,17 +121,19 @@ object VideoToGif {
             val indices = ByteArray(size.first * size.second)
             val delayCentis = (100 / request.fps).coerceAtLeast(2)
             var written = 0
-            for (index in 0 until frames) {
-                coroutineContext.ensureActive()
-                check()
-                val bitmap = frameAt(index) ?: continue
-                mapper.map(bitmap.pixels(), indices)
-                bitmap.recycle()
-                encoder.addFrame(indices, delayCentis)
-                check(out.size() <= GifRequest.MAX_BYTES) { "This clip makes too large a GIF; try a shorter one" }
-                written++
-                onProgress(0.25f + 0.7f * (index + 1f) / frames)
-            }
+            VideoFrames(EncryptedMediaDataSource(vault.keys.fileCipher, video, vault.files.blobFile(video.id)))
+                .use { reader ->
+                    reader.read(start * 1000, targets, size.first, size.second) { index, pixels ->
+                        coroutineContext.ensureActive()
+                        check()
+                        mapper.map(pixels, size.first, indices)
+                        encoder.addFrame(indices, delayCentis)
+                        check(out.size() <= GifRequest.MAX_BYTES) { "This clip makes too large a GIF; try a shorter one" }
+                        written++
+                        onProgress(0.25f + 0.7f * (index + 1f) / frames)
+                        true
+                    }
+                }
             check(written > 0) { "No frames could be read from this video" }
             encoder.finish()
 

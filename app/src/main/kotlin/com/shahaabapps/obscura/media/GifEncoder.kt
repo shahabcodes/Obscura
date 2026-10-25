@@ -177,38 +177,109 @@ class GifEncoder(
 /**
  * Picks a palette of at most 256 colours for a set of frames and maps pixels onto it.
  *
- * Colours are first rounded to 5 bits a channel, then the resulting cloud is split in half
- * repeatedly along whichever channel it spreads over most ("median cut"), which keeps the
- * colours a picture actually uses rather than a fixed grid.
+ * Colours are surveyed in buckets of 5 bits a channel, and the resulting cloud is split in half
+ * repeatedly along whichever channel it spreads over most ("median cut"). Each split is weighted
+ * by how many pixels a colour covers, not by how many different shades there are, so a wide
+ * smooth sky earns more of the palette than a handful of stray pixels in a corner.
  */
 class Quantizer(private val maxColours: Int = 256) {
 
-    private val counts = HashMap<Int, Int>()
+    private val counts = IntArray(BUCKETS)
+    private val sumR = LongArray(BUCKETS)
+    private val sumG = LongArray(BUCKETS)
+    private val sumB = LongArray(BUCKETS)
 
     /** Feeds [pixels] (ARGB) into the colour survey. */
     fun sample(pixels: IntArray) {
         for (pixel in pixels) {
             val key = quantise(pixel)
-            counts[key] = (counts[key] ?: 0) + 1
+            counts[key]++
+            sumR[key] += (pixel shr 16) and 0xFF
+            sumG[key] += (pixel shr 8) and 0xFF
+            sumB[key] += pixel and 0xFF
+        }
+    }
+
+    /** One cloud of colours, with the figures needed to decide whether to split it kept to hand. */
+    private inner class Box(val keys: IntArray) {
+        var population = 0L
+        var channel = 0
+        var range = 0
+
+        init {
+            val low = intArrayOf(32, 32, 32)
+            val high = intArrayOf(-1, -1, -1)
+            for (key in keys) {
+                population += counts[key]
+                for (c in 0..2) {
+                    val value = channelOf(key, c)
+                    if (value < low[c]) low[c] = value
+                    if (value > high[c]) high[c] = value
+                }
+            }
+            for (c in 0..2) {
+                val spread = high[c] - low[c]
+                if (spread > range) {
+                    range = spread
+                    channel = c
+                }
+            }
+        }
+
+        /** Worth splitting only if it holds more than one shade and really does spread. */
+        val splittable: Boolean get() = keys.size > 1 && range > 0
+
+        /** Big and varied beats big and flat, so a gradient is split before a plain wall. */
+        val claim: Double get() = population.toDouble() * range
+
+        /** The colour this box stands for: the average of its pixels, not of its shades. */
+        fun colour(): Int {
+            var r = 0L
+            var g = 0L
+            var b = 0L
+            var n = 0L
+            for (key in keys) {
+                r += sumR[key]
+                g += sumG[key]
+                b += sumB[key]
+                n += counts[key]
+            }
+            if (n == 0L) return 0
+            fun average(total: Long) = (total / n).toInt().coerceIn(0, 255)
+            return (average(r) shl 16) or (average(g) shl 8) or average(b)
         }
     }
 
     /** The palette, as RGB ints. Always holds at least one colour. */
     fun palette(): IntArray {
-        if (counts.isEmpty()) return intArrayOf(0)
-        var boxes = listOf(counts.keys.toIntArray())
+        val used = (0 until BUCKETS).filter { counts[it] > 0 }.toIntArray()
+        if (used.isEmpty()) return intArrayOf(0)
+        val boxes = ArrayList<Box>()
+        boxes += Box(used)
         while (boxes.size < maxColours) {
-            val target = boxes.filter { it.size > 1 }.maxByOrNull { spread(it).second } ?: break
-            val (channel, range) = spread(target)
-            if (range == 0) break
-            val sorted = target.sortedBy { channelOf(it, channel) }.toIntArray()
-            val middle = sorted.size / 2
-            boxes = boxes - listOf(target) + listOf(sorted.copyOfRange(0, middle), sorted.copyOfRange(middle, sorted.size))
+            val target = boxes.filter { it.splittable }.maxByOrNull { it.claim } ?: break
+            val sorted = target.keys.sortedBy { channelOf(it, target.channel) }.toIntArray()
+            // Cut where half the pixels lie rather than half the shades, so neither side of the
+            // split is left standing for almost nothing.
+            val half = target.population / 2
+            var running = 0L
+            var cut = 0
+            while (cut < sorted.size - 1 && running + counts[sorted[cut]] <= half) {
+                running += counts[sorted[cut]]
+                cut++
+            }
+            if (cut == 0) cut = 1
+            boxes -= target
+            boxes += Box(sorted.copyOfRange(0, cut))
+            boxes += Box(sorted.copyOfRange(cut, sorted.size))
         }
-        return boxes.filter { it.isNotEmpty() }.map { average(it) }.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(0)
+        return boxes.map { it.colour() }.toIntArray()
     }
 
     companion object {
+        /** 5 bits a channel: fine enough to survey a picture without a vast table. */
+        private const val BUCKETS = 1 shl 15
+
         /** Rounds a colour to 5 bits a channel, which is as fine as this needs to look. */
         fun quantise(argb: Int): Int =
             (((argb shr 19) and 0x1F) shl 10) or (((argb shr 11) and 0x1F) shl 5) or ((argb shr 3) and 0x1F)
@@ -218,71 +289,72 @@ class Quantizer(private val maxColours: Int = 256) {
             1 -> (key shr 5) and 0x1F
             else -> key and 0x1F
         }
-
-        /** Which channel this cloud of colours spreads over most, and by how much. */
-        private fun spread(box: IntArray): Pair<Int, Int> {
-            var best = 0
-            var bestRange = -1
-            for (channel in 0..2) {
-                var low = 32
-                var high = -1
-                for (key in box) {
-                    val value = channelOf(key, channel)
-                    if (value < low) low = value
-                    if (value > high) high = value
-                }
-                val range = high - low
-                if (range > bestRange) {
-                    bestRange = range
-                    best = channel
-                }
-            }
-            return best to bestRange
-        }
-
-        private fun average(box: IntArray): Int {
-            var r = 0L
-            var g = 0L
-            var b = 0L
-            for (key in box) {
-                r += channelOf(key, 0)
-                g += channelOf(key, 1)
-                b += channelOf(key, 2)
-            }
-            val n = box.size
-            // Back from 5 bits to 8, keeping white white.
-            fun up(v: Long) = ((v / n) * 255 / 31).toInt().coerceIn(0, 255)
-            return (up(r) shl 16) or (up(g) shl 8) or up(b)
-        }
     }
 
-    /** Maps pixels onto [palette], remembering each rounded colour's answer so it is found once. */
+    /**
+     * Maps pixels onto [palette], spreading each pixel's rounding error onto its neighbours
+     * (Floyd-Steinberg). Without this a smooth sky becomes visible bands of flat colour; with it
+     * the same few colours are mixed in a fine texture the eye reads as the shade in between.
+     */
     class Mapper(private val palette: IntArray) {
         private val cache = IntArray(1 shl 15) { -1 }
 
-        fun map(pixels: IntArray, into: ByteArray) {
-            for (i in pixels.indices) {
-                val key = quantise(pixels[i])
-                var index = cache[key]
-                if (index < 0) {
-                    index = nearest(key)
-                    cache[key] = index
+        /** @param width the width of the picture in [pixels], so its rows can be told apart. */
+        fun map(pixels: IntArray, width: Int, into: ByteArray) {
+            if (width <= 0) return
+            val height = pixels.size / width
+            // What the pixels of this row and the next are still owed, three channels each.
+            var thisRow = IntArray(width * 3)
+            var nextRow = IntArray(width * 3)
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val at = y * width + x
+                    val pixel = pixels[at]
+                    val r = (((pixel shr 16) and 0xFF) + thisRow[x * 3]).coerceIn(0, 255)
+                    val g = (((pixel shr 8) and 0xFF) + thisRow[x * 3 + 1]).coerceIn(0, 255)
+                    val b = ((pixel and 0xFF) + thisRow[x * 3 + 2]).coerceIn(0, 255)
+
+                    val index = nearest((r shl 16) or (g shl 8) or b)
+                    into[at] = index.toByte()
+
+                    val chosen = palette[index]
+                    val errorR = r - ((chosen shr 16) and 0xFF)
+                    val errorG = g - ((chosen shr 8) and 0xFF)
+                    val errorB = b - (chosen and 0xFF)
+
+                    // 7 sixteenths to the right, then 3, 5 and 1 onto the row below.
+                    fun give(row: IntArray, column: Int, part: Int) {
+                        if (column < 0 || column >= width) return
+                        row[column * 3] += errorR * part / 16
+                        row[column * 3 + 1] += errorG * part / 16
+                        row[column * 3 + 2] += errorB * part / 16
+                    }
+                    give(thisRow, x + 1, 7)
+                    give(nextRow, x - 1, 3)
+                    give(nextRow, x, 5)
+                    give(nextRow, x + 1, 1)
                 }
-                into[i] = index.toByte()
+                val spent = thisRow
+                thisRow = nextRow
+                nextRow = spent
+                java.util.Arrays.fill(nextRow, 0)
             }
         }
 
-        private fun nearest(key: Int): Int {
-            val r = ((key shr 10) and 0x1F) * 255 / 31
-            val g = ((key shr 5) and 0x1F) * 255 / 31
-            val b = (key and 0x1F) * 255 / 31
+        private fun nearest(colour: Int): Int {
+            val key = quantise(colour)
+            val remembered = cache[key]
+            if (remembered >= 0) return remembered
+            val r = (colour shr 16) and 0xFF
+            val g = (colour shr 8) and 0xFF
+            val b = colour and 0xFF
             var best = 0
             var bestDistance = Int.MAX_VALUE
             for (i in palette.indices) {
-                val colour = palette[i]
-                val dr = r - ((colour shr 16) and 0xFF)
-                val dg = g - ((colour shr 8) and 0xFF)
-                val db = b - (colour and 0xFF)
+                val candidate = palette[i]
+                val dr = r - ((candidate shr 16) and 0xFF)
+                val dg = g - ((candidate shr 8) and 0xFF)
+                val db = b - (candidate and 0xFF)
                 val distance = dr * dr + dg * dg + db * db
                 if (distance < bestDistance) {
                     bestDistance = distance
@@ -290,6 +362,7 @@ class Quantizer(private val maxColours: Int = 256) {
                     if (distance == 0) break
                 }
             }
+            cache[key] = best
             return best
         }
     }
