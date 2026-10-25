@@ -75,6 +75,7 @@ object Routes {
     const val ALBUM = "album"
     const val DUPLICATES = "duplicates"
     const val VIDEOS = "videos"
+    const val GIFS = "gifs"
     const val AUDIO = "audio"
     const val DOCS = "docs"
     const val SEARCH = "search"
@@ -205,6 +206,13 @@ fun ObscuraNavHost(
                     navController.navigate(Routes.GALLERY) { popUpTo(Routes.VIDEOS) { inclusive = true } }
                 }
             }
+            composable(Routes.GIFS) {
+                val gallery: GalleryViewModel = hiltViewModel()
+                LaunchedEffect(Unit) {
+                    gallery.update { it.copy(filter = GalleryFilter.GIFS) }
+                    navController.navigate(Routes.GALLERY) { popUpTo(Routes.GIFS) { inclusive = true } }
+                }
+            }
             composable(Routes.SEARCH) {
                 val gallery: GalleryViewModel = hiltViewModel()
                 SearchScreen(onOpen = { file -> navController.openFile(file, gallery) })
@@ -297,7 +305,7 @@ private fun NavGraphBuilder.unlockScreens(navController: NavHostController) {
 /** Opens a file in the right screen for its type (from search results or an album). */
 private fun NavHostController.openFile(file: VaultFile, gallery: GalleryViewModel) {
     when (file.kind) {
-        FileKind.PHOTO -> {
+        FileKind.PHOTO, FileKind.GIF -> {
             // The viewer pages through the gallery list, so make sure it isn't filtered away.
             gallery.update { it.copy(filter = GalleryFilter.ALL) }
             navigate("${Routes.VIEWER}/${file.id}")

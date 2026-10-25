@@ -62,6 +62,8 @@ data class PlaybackState(
     val speed: Float = 1f,
     val repeat: Boolean = false,
     val error: String? = null,
+    /** The item played through to its end and is waiting there. */
+    val ended: Boolean = false,
 )
 
 @Composable
@@ -75,6 +77,7 @@ fun rememberPlaybackState(player: Player): PlaybackState {
         videoSize = player.videoSize,
         speed = player.playbackParameters.speed,
         repeat = player.repeatMode != Player.REPEAT_MODE_OFF,
+        ended = player.playbackState == Player.STATE_ENDED,
         error = player.playerError?.let { "This file couldn't be played (${it.errorCodeName})." },
     )
     DisposableEffect(player) {

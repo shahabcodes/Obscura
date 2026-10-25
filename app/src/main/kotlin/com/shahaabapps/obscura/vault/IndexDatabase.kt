@@ -16,7 +16,7 @@ import java.io.File
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-enum class FileKind { PHOTO, VIDEO, AUDIO, DOCUMENT, OTHER }
+enum class FileKind { PHOTO, GIF, VIDEO, AUDIO, DOCUMENT, OTHER }
 
 /** One sealed file. Its name, dates and per-file key live only inside the encrypted database. */
 @Entity(tableName = "files", indices = [Index("kind"), Index("takenAt"), Index("sha256"), Index("albumId")])
@@ -161,7 +161,7 @@ fun likePattern(query: String): String =
 
 @Database(
     entities = [VaultFile::class, Album::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
     autoMigrations = [androidx.room.AutoMigration(from = 1, to = 2), androidx.room.AutoMigration(from = 2, to = 3)],
 )
@@ -183,8 +183,23 @@ abstract class IndexDatabase : RoomDatabase() {
             file.parentFile?.mkdirs()
             return Room.databaseBuilder(context, IndexDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory(key))
+                .addMigrations(GIFS_GET_THEIR_OWN_KIND)
                 .build()
         }
+    }
+}
+
+/**
+ * GIFs used to count as photos. The column is unchanged, so only the rows need rewriting; files
+ * already in the vault move to the new kind on first unlock.
+ */
+val GIFS_GET_THEIR_OWN_KIND = object : androidx.room.migration.Migration(3, 4) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        // Matches FileStore.normalise: case and any parameter after ';' are ignored.
+        db.execSQL(
+            "UPDATE files SET kind = 'GIF' WHERE " +
+                "lower(trim(CASE WHEN instr(mimeType, ';') > 0 THEN substr(mimeType, 1, instr(mimeType, ';') - 1) ELSE mimeType END)) = 'image/gif'",
+        )
     }
 }
 

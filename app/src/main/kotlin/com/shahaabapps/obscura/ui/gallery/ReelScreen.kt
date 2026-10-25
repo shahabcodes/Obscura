@@ -1,10 +1,14 @@
 package com.shahaabapps.obscura.ui.gallery
 
 import android.graphics.Bitmap
+import android.view.SurfaceView
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -64,7 +68,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.util.UnstableApi
+import com.shahaabapps.obscura.media.PlaybackState
+import com.shahaabapps.obscura.media.mediaItem
+import com.shahaabapps.obscura.media.rememberPlaybackState
+import com.shahaabapps.obscura.media.rememberVaultPlayer
+import com.shahaabapps.obscura.ui.components.AnimatedGif
+import com.shahaabapps.obscura.ui.components.ImmersiveMode
 import com.shahaabapps.obscura.ui.components.Motion
 import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -74,6 +86,7 @@ import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultFile
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Full-screen, auto-advancing slideshow through the gallery in its current order. */
@@ -98,38 +111,87 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
     val progress = remember { Animatable(0f) }
     val current = files[pager.currentPage.coerceAtMost(files.lastIndex)]
+    // Tap the picture to get the controls out of the way; tap again to bring them back.
+    var chrome by rememberSaveable { mutableStateOf(true) }
+
+    // Videos play for real in the reel. One player serves whichever page is settled; the others
+    // keep showing their still, so only one video is ever decrypted at a time.
+    val factory = remember { viewModel.dataSourceFactory() }
+    val player = factory?.let { rememberVaultPlayer(it) }
+    val playback = player?.let { rememberPlaybackState(it) } ?: PlaybackState()
+    val settled = files.getOrNull(pager.settledPage.coerceAtMost(files.lastIndex))
+    val playingVideo = settled?.kind == FileKind.VIDEO
+    LaunchedEffect(player, settled?.id) {
+        if (player == null) return@LaunchedEffect
+        if (settled == null || settled.kind != FileKind.VIDEO) {
+            player.stop()
+            player.clearMediaItems()
+            return@LaunchedEffect
+        }
+        player.setMediaItem(mediaItem(settled))
+        player.prepare()
+        player.play()
+    }
+    LaunchedEffect(player, paused) { if (player != null && playingVideo) if (paused) player.pause() else player.play() }
 
     // Auto-advance: fill the progress bar, then move to the next item (wrapping at the end).
     // Keyed on settledPage, not currentPage: currentPage changes halfway through a scroll, and
     // restarting there would cancel the scroll itself (leaving the reel stuck between items).
     // One effect owns the progress animation; a second one resetting it would cancel the timer.
     var shownPage by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(pager.settledPage, paused, seconds, files.size) {
+    LaunchedEffect(pager.settledPage, paused, seconds, files.size, playingVideo, playback.ended, playback.error) {
         val page = pager.settledPage
         if (shownPage != page) {
             shownPage = page
             progress.snapTo(0f)
         }
         if (paused) return@LaunchedEffect
-        val remaining = ((1f - progress.value) * seconds * 1000).toInt().coerceAtLeast(1)
-        progress.animateTo(1f, tween(remaining, easing = LinearEasing))
+        if (playingVideo) {
+            // A video gets to play to its end rather than being cut off by the timer. The effect
+            // runs again when it ends or fails, which is what moves the reel on. A file that can
+            // do neither (stuck, or still buffering) gives up after a ceiling, so the reel can
+            // never park on one item for ever.
+            if (!playback.ended && playback.error == null) {
+                val ceiling = ((settled?.durationMs ?: 0L) + STUCK_VIDEO_MS).coerceAtLeast(seconds * 1000L)
+                delay(ceiling)
+            }
+        } else {
+            val remaining = ((1f - progress.value) * seconds * 1000).toInt().coerceAtLeast(1)
+            progress.animateTo(1f, tween(remaining, easing = LinearEasing))
+        }
         pager.animateScrollToPage((page + 1) % files.size)
     }
 
+    ImmersiveMode(!chrome)
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         VerticalPager(state = pager, key = { files[it].id }, beyondViewportPageCount = 1) { page ->
-            ReelPage(files[page], viewModel, onDoubleTap = {
-                if (!files[page].favorite) viewModel.setFavorite(files[page], true)
-                burstKey++
-            })
+            ReelPage(
+                file = files[page],
+                viewModel = viewModel,
+                player = player.takeIf { page == pager.settledPage },
+                showPlayIcon = chrome,
+                isCurrent = page == pager.settledPage,
+                paused = paused,
+                onDoubleTap = {
+                    if (!files[page].favorite) viewModel.setFavorite(files[page], true)
+                    burstKey++
+                },
+                onTap = { chrome = !chrome },
+            )
         }
 
         HeartBurst(burstKey)
 
         // Top: progress, position, pause, close
+        AnimatedVisibility(chrome, enter = fadeIn(), exit = fadeOut()) {
         Column(Modifier.fillMaxWidth().safeDrawingPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            val filled = if (playingVideo) {
+                if (playback.durationMs > 0) (playback.positionMs.toFloat() / playback.durationMs).coerceIn(0f, 1f) else 0f
+            } else {
+                progress.value
+            }
             Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(Prism.Paper.copy(alpha = 0.3f))) {
-                Box(Modifier.fillMaxWidth(progress.value).fillMaxHeight().background(Prism.Paper))
+                Box(Modifier.fillMaxWidth(filled).fillMaxHeight().background(Prism.Paper))
             }
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,9 +207,12 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
             }
         }
 
+        }
+
         // Right: actions
+        AnimatedVisibility(chrome, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.CenterEnd)) {
         Column(
-            Modifier.align(Alignment.CenterEnd).padding(end = 12.dp, top = 120.dp),
+            Modifier.padding(end = 12.dp, top = 120.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -162,9 +227,12 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
             }
         }
 
+        }
+
         // Bottom: details, previous/next, speed
+        AnimatedVisibility(chrome, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
         Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            Modifier.fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
                 .safeDrawingPadding().padding(16.dp),
         ) {
@@ -176,6 +244,9 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
             )
             Spacer(Modifier.height(8.dp))
             Text(current.name, style = PrismType.heading, color = Prism.Paper, maxLines = 1)
+            if (playingVideo) {
+                playback.error?.let { Text(it, style = PrismType.body, color = Prism.Orange) }
+            }
             Text(
                 "${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(current.takenAt))} · ${formatBytes(current.sizeBytes)}",
                 style = PrismType.body,
@@ -209,6 +280,7 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
                 }
             }
         }
+        }
     }
 
     confirmShred?.let { file ->
@@ -220,36 +292,85 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
 }
 
 @Composable
-private fun ReelPage(file: VaultFile, viewModel: GalleryViewModel, onDoubleTap: () -> Unit) {
+private fun ReelPage(
+    file: VaultFile,
+    viewModel: GalleryViewModel,
+    player: androidx.media3.exoplayer.ExoPlayer?,
+    showPlayIcon: Boolean,
+    isCurrent: Boolean,
+    paused: Boolean,
+    onDoubleTap: () -> Unit,
+    onTap: () -> Unit,
+) {
     val maxSide = with(LocalDensity.current) {
         val config = LocalConfiguration.current
         (maxOf(config.screenWidthDp, config.screenHeightDp).dp.toPx()).toInt().coerceAtMost(3072)
     }
+    val isVideo = file.kind == FileKind.VIDEO
+    val isGif = file.kind == FileKind.GIF
     val preview = rememberThumbnail(file, viewModel::thumbnail)
-    val full by produceState<Bitmap?>(null, file.id) { value = viewModel.display(file, maxSide) }
-    // A slow push-in while the item is on screen keeps stills alive, like a Ken Burns pan.
+    val full by produceState<Bitmap?>(null, file.id, isVideo) {
+        if (!isVideo) value = viewModel.display(file, maxSide)
+    }
+    // Only the page on screen decrypts its GIF; a neighbour either side would be three at once.
+    val gif by produceState<ByteArray?>(null, file.id, isGif, isCurrent) {
+        if (isGif && isCurrent) value = viewModel.bytes(file)
+    }
+    // A slow push-in keeps stills alive, like a Ken Burns pan. Moving pictures move already.
+    val still = !isVideo && !isGif
     val zoomAnim = remember(file.id) { Animatable(1f) }
-    LaunchedEffect(file.id) { zoomAnim.animateTo(1.08f, tween(8_000, easing = LinearEasing)) }
+    LaunchedEffect(file.id, still) { if (still) zoomAnim.animateTo(1.08f, tween(8_000, easing = LinearEasing)) }
     val zoom = zoomAnim.value
     Box(
-        Modifier.fillMaxSize().pointerInput(file.id) { detectTapGestures(onDoubleTap = { onDoubleTap() }) },
+        Modifier.fillMaxSize().pointerInput(file.id) {
+            detectTapGestures(onTap = { onTap() }, onDoubleTap = { onDoubleTap() })
+        },
         contentAlignment = Alignment.Center,
     ) {
-        (full ?: preview)?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = file.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = zoom; scaleY = zoom },
-            )
+        when {
+            isVideo && player != null -> {
+                AndroidView(
+                    factory = { context ->
+                        SurfaceView(context).apply {
+                            setSecure(true) // decrypted frames stay out of screenshots
+                            player.setVideoSurfaceView(this)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize().semantics { contentDescription = "Playing ${file.name}" },
+                )
+            }
+            isGif -> {
+                (full ?: preview)?.let {
+                    Image(it.asImageBitmap(), file.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+                AnimatedGif(gif, file.name, modifier = Modifier.fillMaxSize(), crop = true, playing = isCurrent && !paused)
+            }
+            else -> {
+                (full ?: preview)?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = file.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = zoom; scaleY = zoom },
+                    )
+                }
+            }
         }
-        if (file.kind == FileKind.VIDEO) {
-            Box(Modifier.size(72.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+        // A video that isn't the settled page keeps its still, with a hint that it will play.
+        if (isVideo && player == null && showPlayIcon) {
+            Box(
+                Modifier.size(72.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.6f))
+                    .semantics { contentDescription = "Video, waiting to play" },
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Prism.Paper, modifier = Modifier.size(36.dp))
             }
         }
     }
 }
+
+/** How long past a video's own length the reel waits before giving up on it. */
+private const val STUCK_VIDEO_MS = 15_000L
 
 /** The motion kit's heart burst over the centre of the screen; each new key plays it again. */
 @Composable

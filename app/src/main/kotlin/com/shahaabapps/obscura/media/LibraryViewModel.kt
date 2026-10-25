@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
+import com.shahaabapps.obscura.ui.components.MAX_ANIMATED_BYTES
 import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
@@ -69,6 +70,25 @@ class LibraryViewModel @Inject constructor(private val session: VaultSession) : 
         val vault = session.openVault ?: return null
         // Tied to this vault: reading stops when it locks, and never resumes in another one.
         return vault.pdfSource(file) { session.openVault === vault }
+    }
+
+    /** Everything a GIF needs to be shown animated: the sealed bytes, decrypted in memory. */
+    suspend fun bytes(file: VaultFile): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        // Capped, and never fatal: too big or unreadable falls back to the still preview.
+        if (file.sizeBytes > MAX_ANIMATED_BYTES) return@withContext null
+        runCatching {
+            // Read into an array of the known size: growing one would peak at twice the file.
+            val out = ByteArray(file.sizeBytes.toInt())
+            session.openVault?.files?.open(file)?.use { input ->
+                var read = 0
+                while (read < out.size) {
+                    val n = input.read(out, read, out.size - read)
+                    if (n < 0) break
+                    read += n
+                }
+                if (read == out.size) out else null
+            }
+        }.getOrNull()
     }
 
     fun shred(file: VaultFile, onDone: () -> Unit = {}) {

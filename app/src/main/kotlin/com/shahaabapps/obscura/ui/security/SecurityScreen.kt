@@ -72,6 +72,7 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
     var settingUpDecoy by remember { mutableStateOf(false) }
     var confirmWipe by remember { mutableStateOf(false) }
     var confirmRemoveDecoy by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     Column(
@@ -218,6 +219,22 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
 
         PillButton("Lock now", onClick = viewModel::lockNow, container = Prism.Orange)
 
+        if (!state.isDecoy) {
+            Section("DELETE VAULT") {
+                Text("Delete this vault", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper)
+                Text(
+                    "Erases every sealed file, the decoy vault and the keys. Nothing can bring them back, not even a passphrase. Back up first if you want to keep anything.",
+                    style = PrismType.label,
+                    color = Prism.Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                GhostButton("Delete this vault", onClick = {
+                    viewModel.resetDelete()
+                    deleting = true
+                })
+            }
+        }
+
         Section("ABOUT") {
             AboutRow("Version", state.version)
             AboutRow("Network", "None: no internet permission")
@@ -226,6 +243,22 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             AboutRow("Index", "SQLCipher, key derived from the vault")
             Spacer(Modifier.height(10.dp))
             GhostButton("Open-source licences", onClick = onLicences)
+        }
+    }
+
+    if (deleting) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                deleting = false
+                viewModel.resetDelete() // don't leave the passphrase sitting in memory
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Prism.Surface,
+        ) {
+            DeleteVaultSheet(viewModel) {
+                deleting = false
+                viewModel.resetDelete()
+            }
         }
     }
 
@@ -290,6 +323,36 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             containerColor = Prism.Surface,
         ) {
             PinSheet(onDone = { pin -> viewModel.setPin(pin) { settingPin = false } })
+        }
+    }
+}
+
+/** Deleting everything asks for the passphrase, so a borrowed unlocked phone can't do it. */
+@Composable
+private fun DeleteVaultSheet(viewModel: SecurityViewModel, onClose: () -> Unit) {
+    val delete by viewModel.delete.collectAsStateWithLifecycle()
+    LaunchedEffect(delete.done) { if (delete.done) onClose() }
+    Column(
+        Modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("Delete this vault", style = PrismType.heading, color = Prism.Paper)
+        Text(
+            "Every sealed file, the decoy vault and every key are destroyed. The files cannot be recovered afterwards by anyone, including you. Backups already on a drive are not touched.",
+            style = PrismType.body,
+            color = Prism.Muted,
+        )
+        SecretField("Your passphrase", delete.passphrase, viewModel::onDeletePassphrase, accent = if (delete.error != null) Prism.Orange else Prism.Line)
+        delete.error?.let { Text(it, style = PrismType.body, color = Prism.Orange) }
+        if (delete.busy) {
+            SealingIndicator("Destroying the keys…")
+        } else {
+            PillButton(
+                "Delete everything for good",
+                onClick = viewModel::deleteVault,
+                container = if (delete.passphrase.isNotEmpty()) Prism.Orange else Prism.SurfaceHigh,
+                content = if (delete.passphrase.isNotEmpty()) Prism.Ink else Prism.Muted,
+            )
         }
     }
 }

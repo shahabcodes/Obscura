@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Gif
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -95,6 +96,29 @@ fun HomeScreen(state: HomeUiState, onLock: () -> Unit, onOpen: (String) -> Unit)
             }
         }
 
+        // GIFs are their own thing: only shown once there are some to look at.
+        if (state.of(FileKind.GIF).count > 0) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(84.dp)
+                    .prismBlock(Prism.Cobalt)
+                    .clickable(role = Role.Button, onClick = { onOpen(Routes.GIFS) })
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(48.dp).prismBlock(Prism.Sun, 16), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Gif, contentDescription = null, tint = Prism.Ink)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("GIFs", style = PrismType.heading, color = Prism.Paper)
+                    Text(summary(state.of(FileKind.GIF), "GIFs").uppercase(), style = PrismType.label, color = Prism.Paper)
+                }
+                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = Prism.Paper)
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -142,6 +166,7 @@ private fun StorageCard(state: HomeUiState) {
             Row(Modifier.fillMaxWidth().height(8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 val segments = listOf(
                     FileKind.PHOTO to Prism.Cobalt,
+                    FileKind.GIF to Prism.Sun,
                     FileKind.VIDEO to Prism.Pink,
                     FileKind.AUDIO to Prism.Ink,
                     FileKind.DOCUMENT to Prism.Orange,

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.gallery.ShredDialog
 import com.shahaabapps.obscura.ui.gallery.formatDuration
 import com.shahaabapps.obscura.ui.gallery.rememberThumbnail
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -78,6 +80,7 @@ fun AudioScreen(viewModel: LibraryViewModel, onBack: () -> Unit, onImport: () ->
     }
     val playback = rememberPlaybackState(player)
     val current = tracks.getOrNull(playback.index)
+    var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
     var scrubbing by remember { mutableStateOf<Float?>(null) }
 
     Column(Modifier.fillMaxSize().background(Prism.Ink).safeDrawingPadding()) {
@@ -104,6 +107,9 @@ fun AudioScreen(viewModel: LibraryViewModel, onBack: () -> Unit, onImport: () ->
                     Text("NOW PLAYING", style = PrismType.label, color = Prism.Ink)
                     Text(current?.name ?: "—", style = PrismType.heading, color = Prism.Ink, maxLines = 2)
                     current?.let { Text(formatBytes(it.sizeBytes), style = PrismType.label, color = Prism.Ink) }
+                }
+                current?.let { track ->
+                    RoundIconButton(Icons.Outlined.DeleteForever, "Shred", { confirmShred = track }, content = Prism.Orange)
                 }
             }
 
@@ -170,9 +176,23 @@ fun AudioScreen(viewModel: LibraryViewModel, onBack: () -> Unit, onImport: () ->
             }
         }
     }
+
+    ShredTrack(confirmShred, onDismiss = { confirmShred = null }) {
+        val track = confirmShred
+        confirmShred = null
+        track?.let {
+            player.pause()
+            viewModel.shred(it) { if (tracks.size <= 1) onBack() }
+        }
+    }
 }
 
 /** Embedded cover art when the file has one, otherwise a record drawn in Prism colours. */
+@Composable
+private fun ShredTrack(file: VaultFile?, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    file?.let { ShredDialog(it, onDismiss = onDismiss, onConfirm = onConfirm) }
+}
+
 @Composable
 private fun Disc(track: VaultFile?, viewModel: LibraryViewModel, spinning: Boolean) {
     val art = track?.let { rememberThumbnail(it, viewModel::thumbnail) }

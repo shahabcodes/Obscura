@@ -364,6 +364,32 @@ class VaultSession @Inject constructor(
 
     fun lockoutRemainingMs(): Long = lockout.remainingMs()
 
+    /**
+     * Destroys the vault, the decoy and every key that could open them, after checking
+     * [passphrase]. There is no undo and no copy left behind: the files on disk become
+     * meaningless without the master key, which only the deleted header held.
+     */
+    suspend fun deleteVault(passphrase: CharArray): UnlockResult = withContext(Dispatchers.Default) {
+        try {
+            val vault = openVault ?: return@withContext UnlockResult.Failed("Unlock the vault first")
+            if (vault.isDecoy) return@withContext UnlockResult.Failed("Not available here")
+            val remaining = lockout.remainingMs()
+            if (remaining > 0) return@withContext UnlockResult.LockedOut(remaining)
+            try {
+                Vault.unlock(store.readHeader(), passphrase).close()
+            } catch (e: WrongSecretException) {
+                return@withContext failure()
+            }
+            lockout.recordSuccess()
+            wipeEverything()
+            UnlockResult.Success
+        } catch (e: Exception) {
+            UnlockResult.Failed("The vault could not be deleted. Try again, or lock and unlock first.")
+        } finally {
+            passphrase.wipe()
+        }
+    }
+
     /** Wipes keys from memory and closes the index. Safe to call at any time. */
     fun lock() {
         val vault = openVault ?: return

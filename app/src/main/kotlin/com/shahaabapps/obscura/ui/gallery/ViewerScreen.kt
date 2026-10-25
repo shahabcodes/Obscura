@@ -3,6 +3,8 @@ package com.shahaabapps.obscura.ui.gallery
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
@@ -69,7 +71,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shahaabapps.obscura.ui.components.AnimatedGif
 import com.shahaabapps.obscura.ui.components.DecryptingIndicator
+import com.shahaabapps.obscura.ui.components.ImmersiveMode
 import com.shahaabapps.obscura.ui.components.Motion
 import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -98,6 +102,8 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
     val pager = rememberPagerState(initialPage = start) { files.size }
     var zoomed by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
+    // Tap the picture to get out of the way of it; tap again to bring the controls back.
+    var chrome by rememberSaveable { mutableStateOf(true) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
     var pickingAlbum by remember { mutableStateOf(false) }
     var confirmOut by remember { mutableStateOf<Pair<BulkAction, VaultFile>?>(null) }
@@ -110,12 +116,25 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
     }
     val current = files.getOrNull(pager.currentPage.coerceAtMost(files.lastIndex)) ?: return
 
+    ImmersiveMode(!chrome)
     var burst by remember { mutableIntStateOf(0) }
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
         HorizontalPager(state = pager, key = { files[it].id }, userScrollEnabled = !zoomed, beyondViewportPageCount = 1) { page ->
-            ZoomableMedia(files[page], viewModel, onZoomChanged = { if (page == pager.currentPage) zoomed = it }, onPlay = { onPlay(files[page].id) })
+            ZoomableMedia(
+                file = files[page],
+                viewModel = viewModel,
+                onZoomChanged = { if (page == pager.currentPage) zoomed = it },
+                onPlay = { onPlay(files[page].id) },
+                onTap = {
+                    chrome = !chrome
+                    if (!chrome) showInfo = false
+                },
+                controlsVisible = chrome,
+                isCurrent = page == pager.currentPage,
+            )
         }
 
+        AnimatedVisibility(chrome, enter = fadeIn(), exit = fadeOut()) {
         Column(Modifier.fillMaxWidth().safeDrawingPadding().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircleButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Prism.Paper) }
@@ -137,6 +156,8 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
             }
         }
 
+        }
+
         if (burst > 0) {
             key(burst) {
                 var playing by remember { mutableStateOf(true) }
@@ -146,7 +167,8 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
             }
         }
 
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().safeDrawingPadding().padding(12.dp)) {
+        AnimatedVisibility(chrome, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
+        Column(Modifier.fillMaxWidth().safeDrawingPadding().padding(12.dp)) {
             AnimatedVisibility(showInfo, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
                 InfoPanel(current)
             }
@@ -164,6 +186,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
                 BarAction(Icons.Outlined.Download, "Save copy", active = false) { confirmOut = BulkAction.EXPORT to current }
                 BarAction(Icons.Outlined.DeleteForever, "Shred", active = false, tint = Prism.Orange) { confirmShred = current }
             }
+        }
         }
     }
 
@@ -220,7 +243,15 @@ fun ShredDialog(file: VaultFile, onDismiss: () -> Unit, onConfirm: () -> Unit) {
 }
 
 @Composable
-private fun ZoomableMedia(file: VaultFile, viewModel: GalleryViewModel, onZoomChanged: (Boolean) -> Unit, onPlay: () -> Unit) {
+private fun ZoomableMedia(
+    file: VaultFile,
+    viewModel: GalleryViewModel,
+    onZoomChanged: (Boolean) -> Unit,
+    onPlay: () -> Unit,
+    onTap: () -> Unit,
+    controlsVisible: Boolean,
+    isCurrent: Boolean,
+) {
     val maxSide = with(LocalDensity.current) {
         val config = LocalConfiguration.current
         (maxOf(config.screenWidthDp, config.screenHeightDp).dp.toPx() * 1.5f).toInt().coerceAtMost(4096)
@@ -234,7 +265,7 @@ private fun ZoomableMedia(file: VaultFile, viewModel: GalleryViewModel, onZoomCh
         Modifier
             .fillMaxSize()
             .pointerInput(file.id) {
-                detectTapGestures(onDoubleTap = { tap ->
+                detectTapGestures(onTap = { onTap() }, onDoubleTap = { tap ->
                     if (scale > 1f) {
                         scale = 1f
                         offset = Offset.Zero
@@ -263,23 +294,36 @@ private fun ZoomableMedia(file: VaultFile, viewModel: GalleryViewModel, onZoomCh
             },
         contentAlignment = Alignment.Center,
     ) {
+        val zoomLayer = Modifier.fillMaxSize().graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            translationX = offset.x
+            translationY = offset.y
+        }
         val bitmap = full ?: preview
-        if (bitmap != null) {
+        if (file.kind == FileKind.GIF) {
+            // The whole GIF is decrypted in memory, because the frames can't be streamed.
+            // Only this page's GIF is decrypted: the pager keeps a neighbour alive either side,
+            // and three large GIFs at once would exhaust the phone's memory.
+            val gif by produceState<ByteArray?>(null, file.id, isCurrent) {
+                if (isCurrent) value = viewModel.bytes(file)
+            }
+            if (gif == null && bitmap == null) DecryptingIndicator()
+            if (gif == null && bitmap != null) {
+                Image(bitmap.asImageBitmap(), file.name, contentScale = ContentScale.Fit, modifier = zoomLayer)
+            }
+            AnimatedGif(gif, file.name, modifier = zoomLayer, playing = isCurrent)
+        } else if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = file.name,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                },
+                modifier = zoomLayer,
             )
         } else {
             DecryptingIndicator()
         }
-        if (file.kind == FileKind.VIDEO) {
+        if (file.kind == FileKind.VIDEO && controlsVisible) {
             Box(
                 Modifier.size(80.dp).clip(CircleShape).background(Prism.Sun),
                 contentAlignment = Alignment.Center,

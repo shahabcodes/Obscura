@@ -48,7 +48,7 @@ class ThumbnailStore(
         // A damaged or missing blob shows as "no preview" rather than crashing the viewer.
         try {
             when (file.kind) {
-                FileKind.PHOTO -> decodeImage(file, maxSide)
+                FileKind.PHOTO, FileKind.GIF -> decodeImage(file, maxSide)
                 FileKind.VIDEO -> videoFrame(file, maxSide)
                 else -> null
             }
@@ -100,7 +100,7 @@ class ThumbnailStore(
 
     private fun generate(file: VaultFile): Bitmap? = try {
         when (file.kind) {
-            FileKind.PHOTO -> decodeImage(file, THUMB_SIDE)
+            FileKind.PHOTO, FileKind.GIF -> decodeImage(file, THUMB_SIDE)
             FileKind.VIDEO -> videoFrame(file, THUMB_SIDE)
             FileKind.AUDIO -> embeddedArt(file)
             else -> null

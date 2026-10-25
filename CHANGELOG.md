@@ -8,6 +8,26 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-25
+
+### Added
+- **GIFs are their own category.** They have a GIFs filter in the gallery and a tile on Home once you have some, and they now play instead of showing a frozen first frame, both in the gallery viewer and in reel mode. GIFs already in your vault move to the new category by themselves the next time you unlock; nothing needs re-importing.
+- **Pinch the gallery to change how many items fit across it.** Spread two fingers for fewer, bigger items; pinch them together for more. Anywhere from 2 to 6 across, with a small nudge of vibration at each step. Scrolling and press-and-drag selection are unaffected.
+- **Tap a photo, GIF or video to clear the screen.** Everything but the picture fades away; tap again to bring it back. In the video player this gives a proper full-screen view.
+- **Pinch to zoom in videos**, drag to move around once zoomed, and double-tap to go back to normal.
+- **Videos play in reel mode.** Until now the reel showed a still frame with a play button that did nothing. A video now plays, the progress bar follows the video rather than the slideshow timer, and the reel moves on when the video ends instead of cutting it off. Only the video on screen is decrypted.
+- **Delete, where it was missing.** Audio files could not be deleted anywhere at all; videos could not be deleted while watching them. Both now have Shred, with the same confirmation as everywhere else.
+- **Delete this vault**, in Security. It asks for your passphrase, then destroys every sealed file, the decoy vault and every key. Nothing can bring them back. Asking for the passphrase means someone holding your unlocked phone cannot wipe it.
+
+### Changed
+- The encrypted index moves to version 4 (GIFs get their own kind). Existing vaults upgrade on first unlock, with nothing lost. Note that a vault opened by 0.11.0 cannot be opened by an older version of Obscura afterwards; your files are safe, but you would need to install 0.11.0 or newer again.
+- A file's type is now read a little more loosely at import, so a GIF recorded as "image/GIF" is still treated as a GIF.
+- Very large GIFs fall back to a still preview rather than being decrypted whole into memory.
+
+### Tests
+- 119 unit tests and on-device tests covering the new gestures, GIF categorisation and migration, deleting the vault, and a video playing through in the reel.
+- The security review and the end-to-end tester both ran before release. The security review found the reel would stall on a video instead of moving on, which is fixed; five smaller findings were fixed with it.
+
 ## [0.10.1] - 2026-10-25
 
 ### Fixed
@@ -252,7 +272,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/shahabcodes/Obscura/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/shahabcodes/Obscura/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/shahabcodes/Obscura/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shahabcodes/Obscura/compare/v0.8.0...v0.9.0

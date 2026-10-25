@@ -101,7 +101,15 @@ class FileStore(
         /** 128-bit random id, hex. Reveals nothing about the file. */
         fun newId(): String = ByteArray(16).also(random::nextBytes).toHex()
 
-        fun kindOf(mimeType: String): FileKind = when {
+        fun kindOf(rawMimeType: String): FileKind = normalise(rawMimeType).let { mimeType ->
+            kindOfNormalised(mimeType)
+        }
+
+        /** "image/GIF; charset=x" and "image/gif" are the same type. */
+        fun normalise(mimeType: String): String = mimeType.substringBefore(';').trim().lowercase()
+
+        private fun kindOfNormalised(mimeType: String): FileKind = when {
+            mimeType == "image/gif" -> FileKind.GIF
             mimeType.startsWith("image/") -> FileKind.PHOTO
             mimeType.startsWith("video/") -> FileKind.VIDEO
             mimeType.startsWith("audio/") -> FileKind.AUDIO

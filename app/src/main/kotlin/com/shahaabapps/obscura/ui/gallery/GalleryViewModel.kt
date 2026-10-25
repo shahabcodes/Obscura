@@ -11,6 +11,7 @@ import com.shahaabapps.obscura.export.ExportManager
 import com.shahaabapps.obscura.export.ExportProgress
 import com.shahaabapps.obscura.export.ShareGrants
 import com.shahaabapps.obscura.export.shareIntent
+import com.shahaabapps.obscura.ui.components.MAX_ANIMATED_BYTES
 import com.shahaabapps.obscura.vault.AutoLock
 import com.shahaabapps.obscura.vault.BULK_CHUNK
 import com.shahaabapps.obscura.vault.VaultFile
@@ -41,7 +42,7 @@ class GallerySettingsStore @Inject constructor(@ApplicationContext context: Cont
             sortBy = runCatching { SortBy.valueOf(prefs.getString("sortBy", null) ?: "DATE") }.getOrDefault(SortBy.DATE),
             descending = prefs.getBoolean("descending", true),
             groupByMonth = prefs.getBoolean("groupByMonth", true),
-            columns = prefs.getInt("columns", 3).coerceIn(3, 5),
+            columns = prefs.getInt("columns", 3).coerceIn(ColumnRange.MIN, ColumnRange.MAX),
             filter = runCatching { GalleryFilter.valueOf(prefs.getString("filter", null) ?: "ALL") }.getOrDefault(GalleryFilter.ALL),
         ),
     )
@@ -97,6 +98,35 @@ class GalleryViewModel @Inject constructor(
     fun update(transform: (GallerySettings) -> GallerySettings) = settingsStore.update(transform)
 
     suspend fun thumbnail(file: VaultFile): Bitmap? = session.openVault?.thumbnails?.thumbnail(file)
+
+    /** Feeds the reel's video playback, or null when the vault is locked. */
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun dataSourceFactory(): androidx.media3.datasource.DataSource.Factory? {
+        val vault = session.openVault ?: return null
+        // Looked up afresh each time, and only while this very vault is still open.
+        return com.shahaabapps.obscura.media.SealedDataSource.Factory(vault.keys.fileCipher, vault.files) { id ->
+            if (session.openVault !== vault) null else state.value.flat.firstOrNull { it.id == id }
+        }
+    }
+
+    /** The whole file decrypted in memory, for formats that can't be streamed (GIF). */
+    suspend fun bytes(file: VaultFile): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        // Capped, and never fatal: too big or unreadable falls back to the still preview.
+        if (file.sizeBytes > MAX_ANIMATED_BYTES) return@withContext null
+        runCatching {
+            // Read into an array of the known size: growing one would peak at twice the file.
+            val out = ByteArray(file.sizeBytes.toInt())
+            session.openVault?.files?.open(file)?.use { input ->
+                var read = 0
+                while (read < out.size) {
+                    val n = input.read(out, read, out.size - read)
+                    if (n < 0) break
+                    read += n
+                }
+                if (read == out.size) out else null
+            }
+        }.getOrNull()
+    }
 
     suspend fun display(file: VaultFile, maxSide: Int): Bitmap? = session.openVault?.thumbnails?.display(file, maxSide)
 

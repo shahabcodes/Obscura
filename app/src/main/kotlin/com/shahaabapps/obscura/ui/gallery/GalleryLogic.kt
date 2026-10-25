@@ -11,7 +11,7 @@ import java.util.Locale
 enum class SortBy(val label: String) { DATE("Date"), SIZE("Size"), TYPE("Type") }
 
 enum class GalleryFilter(val label: String) {
-    ALL("All"), PHOTOS("Photos"), VIDEOS("Videos"), SCREENSHOTS("Screens"), FAVORITES("Favourites")
+    ALL("All"), PHOTOS("Photos"), VIDEOS("Videos"), GIFS("GIFs"), SCREENSHOTS("Screens"), FAVORITES("Favourites")
 }
 
 data class GallerySettings(
@@ -40,13 +40,14 @@ object GalleryLogic {
 
     fun isScreenshot(file: VaultFile) = file.kind == FileKind.PHOTO && file.name.contains("screenshot", ignoreCase = true)
 
-    /** Photos and videos matching [filter]. */
+    /** Everything the gallery shows: photos, GIFs and videos, matching [filter]. */
     fun media(all: List<VaultFile>, filter: GalleryFilter): List<VaultFile> = all.filter { f ->
-        val isMedia = f.kind == FileKind.PHOTO || f.kind == FileKind.VIDEO
+        val isMedia = f.kind == FileKind.PHOTO || f.kind == FileKind.GIF || f.kind == FileKind.VIDEO
         isMedia && when (filter) {
             GalleryFilter.ALL -> true
             GalleryFilter.PHOTOS -> f.kind == FileKind.PHOTO && !isScreenshot(f)
             GalleryFilter.VIDEOS -> f.kind == FileKind.VIDEO
+            GalleryFilter.GIFS -> f.kind == FileKind.GIF
             GalleryFilter.SCREENSHOTS -> isScreenshot(f)
             GalleryFilter.FAVORITES -> f.favorite
         }
@@ -69,6 +70,7 @@ object GalleryLogic {
 
     fun typeLabel(file: VaultFile): String = when {
         isScreenshot(file) -> "Screenshot"
+        file.kind == FileKind.GIF -> "GIF"
         file.kind == FileKind.VIDEO -> "Video"
         else -> file.mimeType.substringAfter('/').uppercase().let { if (it == "JPEG") "JPG" else it }
     }

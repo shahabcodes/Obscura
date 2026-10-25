@@ -191,7 +191,9 @@ fun GalleryScreen(
             } else {
                 LazyVerticalGrid(
                     state = gridState,
-                    modifier = Modifier.fillMaxSize().dragToSelect(gridState, selecting, ids, selection, viewModel::setSelection),
+                    modifier = Modifier.fillMaxSize()
+                        .pinchToChangeColumns(settings.columns) { n -> viewModel.update { it.copy(columns = n) } }
+                        .dragToSelect(gridState, selecting, ids, selection, viewModel::setSelection),
                     columns = GridCells.Fixed(settings.columns),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -409,7 +411,7 @@ private fun SortSheet(settings: GallerySettings, update: ((GallerySettings) -> G
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Grid density", style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper, modifier = Modifier.weight(1f))
             Row(Modifier.clip(CircleShape).background(Prism.Ink).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(3, 4, 5).forEach { n ->
+                ColumnRange.choices.forEach { n ->
                     val on = settings.columns == n
                     Box(
                         Modifier.size(width = 46.dp, height = 38.dp).clip(CircleShape).background(if (on) Prism.Paper else Color.Transparent)

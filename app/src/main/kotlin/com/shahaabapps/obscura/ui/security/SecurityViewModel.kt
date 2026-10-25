@@ -9,18 +9,18 @@ import com.shahaabapps.obscura.ui.components.canUseStrongBiometric
 import com.shahaabapps.obscura.ui.setup.PassphraseStrength
 import com.shahaabapps.obscura.vault.AutoLock
 import com.shahaabapps.obscura.vault.PanicLock
-import com.shahaabapps.obscura.vault.VaultSettings
 import com.shahaabapps.obscura.vault.UnlockResult
 import com.shahaabapps.obscura.vault.VaultSession
+import com.shahaabapps.obscura.vault.VaultSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.crypto.Cipher
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.crypto.Cipher
-import javax.inject.Inject
 
 data class SecurityState(
     val fingerprintAvailable: Boolean = false,
@@ -64,6 +64,13 @@ data class PassphraseChange(
     val strength get() = PassphraseStrength.evaluate(replacement)
     val canSubmit get() = current.isNotEmpty() && strength.score >= PassphraseStrength.MIN_SCORE && replacement == confirm && !busy
 }
+
+data class DeleteVault(
+    val passphrase: String = "",
+    val busy: Boolean = false,
+    val error: String? = null,
+    val done: Boolean = false,
+)
 
 data class DecoySetup(
     val passphrase: String = "",
@@ -111,6 +118,32 @@ class SecurityViewModel @Inject constructor(
             hasDecoy = session.hasDecoy(),
             lastBackupAt = backups.lastBackupAt(),
         )
+    }
+
+    private val _delete = MutableStateFlow(DeleteVault())
+    val delete: StateFlow<DeleteVault> = _delete.asStateFlow()
+
+    fun onDeletePassphrase(value: String) = _delete.update { it.copy(passphrase = value, error = null) }
+
+    fun resetDelete() { _delete.value = DeleteVault() }
+
+    /** Destroys everything after checking the passphrase; navigation notices the vault is gone. */
+    fun deleteVault() {
+        val d = _delete.value
+        if (d.passphrase.isEmpty() || d.busy) return
+        _delete.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            val result = session.deleteVault(d.passphrase.toCharArray())
+            _delete.update {
+                when (result) {
+                    UnlockResult.Success -> DeleteVault(done = true)
+                    is UnlockResult.Wrong -> it.copy(busy = false, passphrase = "", error = "That passphrase is wrong. ${result.freeAttemptsLeft} tries before a wait.")
+                    is UnlockResult.LockedOut -> it.copy(busy = false, passphrase = "", error = "Too many wrong attempts. Try again in ${(result.remainingMs + 59_999) / 60_000} min.")
+                    is UnlockResult.Failed -> it.copy(busy = false, passphrase = "", error = result.message)
+                    UnlockResult.Wiped -> DeleteVault(done = true)
+                }
+            }
+        }
     }
 
     fun setPanicLock(on: Boolean) {
