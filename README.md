@@ -35,6 +35,23 @@ The **Release** workflow tests, signs and publishes `Obscura_<version>.apk` with
 section as release notes. It needs four repository secrets: `OBSCURA_KEYSTORE_BASE64`,
 `OBSCURA_KEYSTORE_PASSWORD`, `OBSCURA_KEY_ALIAS` and `OBSCURA_KEY_PASSWORD`.
 
+### Signing a release build locally
+
+No key, password, or path to one lives in this repository. The build reads them from the clone's
+own git config, which is kept in `.git/config` and is never committed:
+
+```sh
+git config obscura.signing.keystore      /path/to/obscura-release.jks
+git config obscura.signing.storePassword '…'
+git config obscura.signing.keyAlias      '…'
+git config obscura.signing.keyPassword   '…'
+```
+
+`./gradlew assembleRelease` then signs the APK. Without them the release build is left unsigned,
+which is what happens on anyone else's clone. The matching `OBSCURA_*` environment variables are
+read as a fallback, which is how the workflow signs with its secrets. Keep the keystore itself
+outside the working tree; `*.jks` and `*.keystore` are ignored in any case.
+
 ## Project layout
 
 | Module | Contents |

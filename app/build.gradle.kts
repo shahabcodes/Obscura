@@ -32,16 +32,38 @@ android {
         arg("room.schemaLocation", "$projectDir/schemas")
     }
 
-    // Release signing comes from the environment (GitHub Actions secrets). Without it the
-    // release build is left unsigned, so no key material ever lives in the repository.
-    val keystorePath = System.getenv("OBSCURA_KEYSTORE_PATH")
+    // Release signing is read from this machine's git config, falling back to the environment
+    // for CI. Both live outside the working tree — git config in .git/config, which is never
+    // committed — so no key, password or path to one is ever part of the repository or the code.
+    // Set them once per clone:
+    //
+    //   git config obscura.signing.keystore      /path/to/obscura-release.jks
+    //   git config obscura.signing.storePassword ...
+    //   git config obscura.signing.keyAlias      ...
+    //   git config obscura.signing.keyPassword   ...
+    //
+    // Without them the release build is simply left unsigned.
+    fun gitConfig(key: String): String? = runCatching {
+        val process = ProcessBuilder("git", "config", "--get", key)
+            .directory(rootDir)
+            .redirectErrorStream(false)
+            .start()
+        val value = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        process.errorStream.close()
+        if (process.waitFor() == 0 && value.isNotEmpty()) value else null
+    }.getOrNull()
+
+    fun signingValue(name: String, environmentName: String): String? =
+        gitConfig("obscura.signing.$name") ?: System.getenv(environmentName)
+
+    val keystorePath = signingValue("keystore", "OBSCURA_KEYSTORE_PATH")
     signingConfigs {
         if (keystorePath != null) {
             create("release") {
                 storeFile = file(keystorePath)
-                storePassword = System.getenv("OBSCURA_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("OBSCURA_KEY_ALIAS")
-                keyPassword = System.getenv("OBSCURA_KEY_PASSWORD")
+                storePassword = signingValue("storePassword", "OBSCURA_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "OBSCURA_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "OBSCURA_KEY_PASSWORD")
             }
         }
     }
