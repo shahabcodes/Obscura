@@ -144,6 +144,20 @@ interface FileDao {
     @Query("SELECT * FROM files")
     suspend fun all(): List<VaultFile>
 
+    @Query("SELECT COUNT(*) FROM files")
+    suspend fun count(): Int
+
+    @Query("SELECT COALESCE(SUM(sizeBytes), 0) FROM files")
+    suspend fun totalBytes(): Long
+
+    /**
+     * One page of files, walked by id rather than by position, so that exporting a vault of
+     * hundreds of thousands of files never holds them all in memory and never gets slower the
+     * further through it gets. Start with an empty [afterId].
+     */
+    @Query("SELECT * FROM files WHERE id > :afterId ORDER BY id LIMIT :limit")
+    suspend fun pageAfter(afterId: String, limit: Int): List<VaultFile>
+
     @Query("SELECT * FROM files WHERE albumId = :albumId ORDER BY takenAt DESC")
     fun observeInAlbum(albumId: String): Flow<List<VaultFile>>
 

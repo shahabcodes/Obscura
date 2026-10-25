@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only. Obscura's real import and export talk to a folder through the Storage
+  Access Framework, which means a DocumentsProvider owned by some other app. Tests used to
+  stand in a plain java.io.File for that, which quietly skipped the code a real folder picker
+  actually exercises. This provider is a real one over a temporary directory, so those paths
+  can be tested properly. It is never part of a release build.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <provider
+            android:name="com.shahaabapps.obscura.testing.LocalFilesProvider"
+            android:authorities="${applicationId}.testfiles"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
+
+</manifest>

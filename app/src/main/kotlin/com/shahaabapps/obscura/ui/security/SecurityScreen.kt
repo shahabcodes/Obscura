@@ -64,7 +64,7 @@ import com.shahaabapps.obscura.ui.theme.PrismType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRecoveryKey: () -> Unit = {}, viewModel: SecurityViewModel = hiltViewModel()) {
+fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRecoveryKey: () -> Unit = {}, onExportAll: () -> Unit = {}, onGuide: () -> Unit = {}, viewModel: SecurityViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var changingPassphrase by remember { mutableStateOf(false) }
@@ -242,6 +242,8 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             AboutRow("Passphrase", "Argon2id, 64 MB, 3 passes")
             AboutRow("Index", "SQLCipher, key derived from the vault")
             Spacer(Modifier.height(10.dp))
+            GhostButton("How Obscura works — a tour", onClick = onGuide)
+            GhostButton("Export everything to a folder", onClick = onExportAll)
             GhostButton("Open-source licences", onClick = onLicences)
         }
     }

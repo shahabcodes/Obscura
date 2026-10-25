@@ -58,6 +58,13 @@ class AutoLockTest {
         shell("wm dismiss-keyguard")
     }
 
+    /**
+     * These tests turn the screen off on purpose. Left that way, nothing after them can bring an
+     * activity up at all, so the device is handed back awake.
+     */
+    @After
+    fun wakeAgain() = wake()
+
     @After
     fun tearDown() {
         entry.autoLock().delayMs = AutoLock.DEFAULT_DELAY_MS

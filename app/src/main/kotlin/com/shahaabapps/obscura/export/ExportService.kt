@@ -69,8 +69,14 @@ class ExportService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Android gives a background job of this kind a few hours a day and then takes it back. A
+     * vault of a couple of hundred gigabytes will not finish inside that, so the run is stopped
+     * in a way that says it can be picked up: everything already copied is left in place and
+     * the next run skips it.
+     */
     override fun onTimeout(startId: Int, fgsType: Int) {
-        exportManager.cancel()
+        exportManager.pauseForTimeLimit()
         stopSelf()
     }
 
@@ -91,7 +97,13 @@ class ExportService : Service() {
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_seal)
             .setContentTitle("Exporting files")
-            .setContentText("%,d of %,d · vault stays open until done".format(progress.done, progress.total))
+            .setContentText(
+                if (progress.total > 0) {
+                    "%,d of %,d · vault stays open until done".format(progress.done, progress.total)
+                } else {
+                    "Working out what to copy…"
+                },
+            )
             .setProgress(100, (progress.fraction * 100).toInt(), progress.total == 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

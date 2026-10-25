@@ -58,6 +58,16 @@ class ImportManagerTest {
         }
     }
 
+    /**
+     * Runs a shell command and waits for it to finish. Closing the descriptor straight away can
+     * cut the command off before it has run, which makes turning the screen off a coin toss.
+     */
+    private fun shell(command: String) {
+        instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
+            java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+        }
+    }
+
     private fun wipe() = instrumentation.runOnMainSync {
         manager.cancel()
         entry.session().lock()
@@ -101,6 +111,8 @@ class ImportManagerTest {
 
     @After
     fun tearDown() {
+        // This class turns the screen off; hand it back awake for whatever runs next.
+        shell("input keyevent KEYCODE_WAKEUP")
         manager.reset()
         wipe()
     }
@@ -155,15 +167,25 @@ class ImportManagerTest {
     fun vaultStaysOpenDuringImportThenLocks() {
         val slow = TestSource("big.bin", "application/octet-stream", ByteArray(6 * 64 * 1024), delayPerChunkMs = 400)
         manager.start(listOf(slow), ImportOptions(), startService = false)
-        instrumentation.uiAutomation.executeShellCommand("input keyevent KEYCODE_SLEEP").close()
+        // The screen has to be on for turning it off to mean anything: if a long test ran just
+        // before this one the device may have dimmed out by itself, and then KEYCODE_SLEEP
+        // changes nothing and no lock is ever asked for.
+        shell("input keyevent KEYCODE_WAKEUP")
+        Thread.sleep(600)
+        shell("input keyevent KEYCODE_SLEEP")
         Thread.sleep(1_000)
         assertTrue("vault must stay unlocked while importing", entry.session().state.value is VaultState.Unlocked)
         assertTrue(entry.autoLock().isLockDeferred)
         val result = awaitFinished()
         assertEquals(1, result.sealed)
-        Thread.sleep(500)
+        // The deferred lock runs on the main thread once the last hold is given back, so wait
+        // for it rather than guessing how long that takes on a busy device.
+        val until = System.currentTimeMillis() + 10_000
+        while (entry.session().state.value !is VaultState.Locked && System.currentTimeMillis() < until) {
+            Thread.sleep(50)
+        }
         assertTrue("deferred lock happens once the import is done", entry.session().state.value is VaultState.Locked)
-        instrumentation.uiAutomation.executeShellCommand("input keyevent KEYCODE_WAKEUP").close()
+        shell("input keyevent KEYCODE_WAKEUP")
     }
 
     @Test

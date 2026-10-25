@@ -84,6 +84,8 @@ object Routes {
     const val SECURITY = "security"
     const val BACKUP = "backup"
     const val LICENCES = "licences"
+    const val EXPORT_ALL = "export-all"
+    const val GUIDE = "guide"
     const val RECOVERY_KEY = "security/recovery"
 
     /** Destinations that show the floating bottom bar. */
@@ -232,11 +234,19 @@ fun ObscuraNavHost(
                 SecurityScreen(
                     onBackup = { navController.navigate(Routes.BACKUP) },
                     onLicences = { navController.navigate(Routes.LICENCES) },
+                    onExportAll = { navController.navigate(Routes.EXPORT_ALL) },
+                    onGuide = { navController.navigate(Routes.GUIDE) },
                     onRecoveryKey = { navController.navigate(Routes.RECOVERY_KEY) },
                 )
             }
             composable(Routes.RECOVERY_KEY) { NewRecoveryKeyScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.LICENCES) { LicencesScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.GUIDE) {
+                com.shahaabapps.obscura.ui.guide.GuideScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.EXPORT_ALL) {
+                com.shahaabapps.obscura.ui.export.ExportAllScreen(onBack = { navController.popBackStack() })
+            }
             composable(Routes.IMPORT) { ImportScreen() }
         }
 

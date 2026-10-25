@@ -8,6 +8,21 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-25
+
+### Added
+- **Export everything to a folder.** In Security. Writes a readable copy of the whole vault into a folder you choose — a USB drive, an SD card, anywhere the system picker will go. Built for a vault far bigger than this phone's memory: files are walked a page at a time and streamed one by one, so a vault of a few hundred gigabytes costs no more memory than a small one.
+  - It keeps going while you use other apps, holding itself up with a notification that shows how far along it is. The vault stays open until it finishes, and locks again afterwards.
+  - Copies go into a folder for each month rather than one enormous directory.
+  - **It can be picked up where it left off.** Run it again into the same folder and anything already copied whole is left alone and skipped. That covers a drive being unplugged, the vault locking, you stopping it — and Android's own limit on how long a background job may run, which a multi-hour export will reach. It says so plainly when that happens, and offers to carry on.
+- **A tour of the app**, also in Security: every control and every gesture, including the ones with no button to find — pinching the gallery to change how many fit across, tapping a picture to clear the screen, swiping through reel mode.
+
+### Fixed
+- Picking a folder for an export used to let the vault lock while the system picker was in front, so you came back to a locked vault and nothing happened. The vault is now held open while you choose, as it already was for backups.
+
+### Tests
+- 132 unit tests and 189 on-device tests. Exporting is now tested through the Storage Access Framework — the folder a real picker hands over — rather than a plain directory standing in for it: files are taken in from a folder, the originals removed, and then written back into that same folder byte for byte. Exporting everything is tested stopped partway and run again (nothing copied twice, nothing missed), across more files than fit in one page of the index, with memory measured so it cannot creep up with the number of files, with the vault locked mid-run, and left running while the app is backgrounded.
+
 ## [0.13.0] - 2026-10-25
 
 ### Added
