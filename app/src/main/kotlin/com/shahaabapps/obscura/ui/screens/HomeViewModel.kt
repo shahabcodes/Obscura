@@ -6,6 +6,7 @@ import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import javax.inject.Inject
 
 data class KindSummary(val count: Int = 0, val bytes: Long = 0)
 
@@ -23,6 +23,16 @@ data class HomeUiState(
     val byKind: Map<FileKind, KindSummary> = emptyMap(),
 ) {
     fun of(kind: FileKind) = byKind[kind] ?: KindSummary()
+
+    /**
+     * The Documents tile counts what the Documents screen lists, which includes files of kinds
+     * it has no preview for; otherwise the tile and the screen disagree.
+     */
+    fun documents(): KindSummary {
+        val documents = of(FileKind.DOCUMENT)
+        val other = of(FileKind.OTHER)
+        return KindSummary(documents.count + other.count, documents.bytes + other.bytes)
+    }
 }
 
 @HiltViewModel

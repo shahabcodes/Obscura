@@ -110,7 +110,7 @@ fun HomeScreen(state: HomeUiState, onLock: () -> Unit, onOpen: (String) -> Unit)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text("Documents", style = PrismType.heading, color = Prism.Ink)
-                Text(summary(state.of(FileKind.DOCUMENT), "documents").uppercase(), style = PrismType.label, color = Prism.Ink)
+                Text(summary(state.documents(), "documents").uppercase(), style = PrismType.label, color = Prism.Ink)
             }
             Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = Prism.Ink)
         }

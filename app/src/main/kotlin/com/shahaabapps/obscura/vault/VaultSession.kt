@@ -446,6 +446,7 @@ class VaultSession @Inject constructor(
             keys.close()
             throw e
         }
+        target.clearTemp()
         val files = FileStore(target, keys.fileCipher, database.files())
         _state.value = VaultState.Unlocked(OpenVault(keys, database, files, ThumbnailStore(target, keys.fileCipher, files), dbKey, target, isDecoy))
     }

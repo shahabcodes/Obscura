@@ -81,4 +81,63 @@ class AutoLockTest {
             assertTrue("Vault should lock after leaving the app", waitForLock())
         }
     }
+
+    /** Activity first, then unlock: so the app's own onStart can't race the test's. */
+    private fun foregroundThenUnlock(): ActivityScenario<MainActivity> {
+        wipe()
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        instrumentation.waitForIdleSync()
+        runBlocking { entry.session().create("lantern orbit velvet canyon mosaic".toCharArray()) }
+        assertTrue(entry.session().state.value is VaultState.Unlocked)
+        return scenario
+    }
+
+    /**
+     * A lock that came due while long work held the vault open must survive the user coming
+     * back. This is the system-picker case: the picker holds the vault open, the lock falls due
+     * behind it, and returning used to wipe it, leaving the vault unlocked for good.
+     */
+    @Test
+    fun aLockThatFellDueWhileHeldSurvivesComingBack() {
+        val autoLock = entry.autoLock()
+        autoLock.delayMs = 500
+        foregroundThenUnlock().use {
+            autoLock.hold() // what the file picker and a running import do
+            try {
+                instrumentation.runOnMainSync { autoLock.onStop(FakeOwner) }
+                Thread.sleep(1_200) // the lock falls due behind the picker
+                instrumentation.runOnMainSync { autoLock.onStart(FakeOwner) } // the user comes back
+                assertTrue("still unlocked while the work runs", entry.session().state.value is VaultState.Unlocked)
+                assertTrue("but a lock is still owed", autoLock.isLockDeferred)
+            } finally {
+                autoLock.release() // the picker closed, or the import finished
+            }
+            assertTrue("locks as soon as the work ends", waitForLock(3_000))
+        }
+    }
+
+    /** Screen off while work holds the vault open: it locks the moment that work ends. */
+    @Test
+    fun screenOffWhileHeldLocksWhenTheWorkEnds() {
+        val autoLock = entry.autoLock()
+        autoLock.delayMs = 60_000
+        foregroundThenUnlock().use {
+            autoLock.hold()
+            try {
+                shell("input keyevent KEYCODE_SLEEP")
+                Thread.sleep(1_000)
+                assertTrue("held open while the work runs", entry.session().state.value is VaultState.Unlocked)
+                wake()
+                instrumentation.runOnMainSync { autoLock.onStart(FakeOwner) }
+            } finally {
+                autoLock.release()
+            }
+            assertTrue("the screen went off, so it still locks", waitForLock(3_000))
+        }
+    }
+
+    /** Stands in for the process lifecycle owner, so leaving and returning can be driven exactly. */
+    private object FakeOwner : androidx.lifecycle.LifecycleOwner {
+        override val lifecycle = androidx.lifecycle.LifecycleRegistry(this)
+    }
 }

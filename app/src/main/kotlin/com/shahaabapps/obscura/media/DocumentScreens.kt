@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -163,8 +164,7 @@ fun DocumentScreen(viewModel: LibraryViewModel, id: String, onBack: () -> Unit) 
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                file.mimeType == "application/pdf" && SealedPdf.supported -> PdfView(file, viewModel)
-                file.mimeType == "application/pdf" -> Unsupported("PDF preview needs Android 11 or newer. The file is safely sealed in the vault.")
+                file.mimeType == "application/pdf" -> PdfView(file, viewModel)
                 TextPreview.isText(file) -> TextView(file, viewModel)
                 else -> Unsupported("There's no in-app preview for this kind of file yet. It is safely sealed in the vault.")
             }
@@ -180,11 +180,17 @@ fun DocumentScreen(viewModel: LibraryViewModel, id: String, onBack: () -> Unit) 
 
 @Composable
 private fun PdfView(file: VaultFile, viewModel: LibraryViewModel) {
+    val context = LocalContext.current
     val pdf by produceState<Result<SealedPdf>?>(null, file.id) {
-        value = runCatching { SealedPdf.open { checkNotNull(viewModel.open(file)) { "Vault is locked" } } }
+        value = runCatching {
+            SealedPdf.open(context, checkNotNull(viewModel.pdfSource(file)) { "the vault is locked" })
+        }
     }
-    DisposableEffect(pdf) { onDispose { pdf?.getOrNull()?.close() } }
-    when (val result = pdf) {
+    // Hold the document in a local: reading `pdf` inside onDispose would read the NEW value,
+    // closing the document the moment it arrives and leaving every page blank.
+    val opened = pdf
+    DisposableEffect(opened) { onDispose { opened?.getOrNull()?.close() } }
+    when (val result = opened) {
         null -> Loading()
         else -> result.fold(
             onSuccess = { document ->
@@ -192,6 +198,8 @@ private fun PdfView(file: VaultFile, viewModel: LibraryViewModel) {
                     val widthPx = with(LocalDensity.current) { maxWidth.toPx() }.toInt().coerceAtMost(2000)
                     LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(document.pageCount) { index ->
+                            // null once the document closes (leaving the screen) or if this
+                            // page can't be drawn; either way the row just stays blank.
                             val page by produceState<Bitmap?>(null, index, widthPx) { value = document.render(index, widthPx) }
                             Box(
                                 Modifier.fillMaxWidth().aspectRatio(page?.let { it.width.toFloat() / it.height } ?: 0.707f)
@@ -204,7 +212,7 @@ private fun PdfView(file: VaultFile, viewModel: LibraryViewModel) {
                     }
                 }
             },
-            onFailure = { Unsupported("This PDF couldn't be opened: ${it.message}") },
+            onFailure = { Unsupported("This PDF couldn't be opened: ${it.message?.trimEnd('.', '!')}. It is safely sealed in the vault.") },
         )
     }
 }

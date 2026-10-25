@@ -28,14 +28,6 @@ import com.shahaabapps.obscura.vault.OpenVault
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultStore
-import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -45,6 +37,14 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
 
 /** Real decoding through the decrypting path: MP4 video, WAV audio and a PDF. */
 @OptIn(UnstableApi::class)
@@ -264,7 +264,6 @@ class MediaPlaybackTest {
 
     @Test
     fun sealedPdfRendersPages() = runBlocking {
-        if (!SealedPdf.supported) return@runBlocking
         val pdfBytes = ByteArrayOutputStream().also { out ->
             PdfDocument().apply {
                 repeat(3) { n ->
@@ -277,9 +276,10 @@ class MediaPlaybackTest {
             }
         }.toByteArray()
         val doc = seal(pdfBytes, "statement.pdf", "application/pdf")
-        SealedPdf.open { vault.files.open(doc) }.use { pdf ->
+        // Through the real sealed file, decrypted as the renderer reads it.
+        SealedPdf.open(context, vault.pdfSource(doc)).use { pdf ->
             assertEquals(3, pdf.pageCount)
-            val page: Bitmap = pdf.render(1, 600)
+            val page: Bitmap = requireNotNull(pdf.render(1, 600)) { "page rendered" }
             assertEquals(600, page.width)
             assertEquals(800, page.height)
             assertEquals("the blue box was drawn", Color.rgb(59, 91, 255), page.getPixel(300, 120))

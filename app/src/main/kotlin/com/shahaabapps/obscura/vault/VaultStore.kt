@@ -1,6 +1,8 @@
 package com.shahaabapps.obscura.vault
 
 import android.content.Context
+import android.os.Process
+import android.os.SystemClock
 import android.util.AtomicFile
 import com.shahaabapps.obscura.crypto.PinLock
 import com.shahaabapps.obscura.crypto.VaultHeader
@@ -54,6 +56,19 @@ class VaultStore internal constructor(val root: File) {
     fun writeBiometric(sealed: ByteArray) = write(bioFile, sealed)
 
     fun deleteBiometric() = bioFile.delete()
+
+    /**
+     * Removes half-written files from an import the app never finished, for example because it
+     * was killed mid-write. They are encrypted, but they would otherwise sit there for good.
+     * Only files from an earlier run of the app go: a lock can land while an import is still
+     * writing, and that file is not ours to delete.
+     */
+    fun clearTemp() {
+        val processStarted = System.currentTimeMillis() - (SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime())
+        tempDir.listFiles()?.forEach { file ->
+            if (file.lastModified() < processStarted) runCatching { file.delete() }
+        }
+    }
 
     /** Removes the entire vault. Only reachable through an explicit, confirmed user action. */
     fun destroy() {

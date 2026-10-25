@@ -8,6 +8,24 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-25
+
+### Fixed
+- **Opening a PDF crashed the app.** The viewer closed the document the instant it finished opening, so the first page was drawn against a closed document. Reported from a real phone, and now covered by tests that open PDFs through the actual viewer.
+- Two further faults found while chasing that crash, either of which could have crashed or frozen the app on its own:
+  - A PDF may declare a page metres long. Obscura asked for a picture of it at full size, which for one test page meant 700 MB of memory: enough to lock the phone up rather than merely fail. Pages are now drawn at a size that fits in memory, keeping their proportions.
+  - Pages that were still being drawn when you left the document brought the app down. They are now dropped quietly.
+- Large PDFs no longer have to fit in memory. A PDF is decrypted a piece at a time as you scroll, instead of being decrypted into memory in full before the first page appears, so big scans open quickly on a phone that is short of memory. Nothing is written to storage, as before.
+- PDF previews now work on Android 10, which previously said they needed Android 11.
+- A PDF that can't be opened (damaged, or protected by someone else's password) says so clearly, and a page that can't be drawn leaves its place blank instead of taking the viewer down.
+- **The vault could stay unlocked after the screen went off.** With a system file picker or share sheet on top, Android can freeze Obscura, so neither its lock timer nor the screen-off signal reaches it; coming back then cancelled the lock that was already due. Obscura now checks the clock when it returns, and a lock that is waiting for work to finish is no longer forgotten.
+- Killing the app mid-import left a half-written file behind for good. These are encrypted, but they wasted space; they are now cleared the next time you unlock.
+- Home's Documents tile counted fewer files than the Documents screen listed.
+
+### Tests
+- 114 unit tests and 100 on-device tests. New: PDFs opened through the real viewer (ordinary, 300-page, page-metres-long, damaged), closing a document while forty pages render at once, the vault locking after a picker held it open, and leftover import files being swept.
+- End-to-end testing of whole journeys with interruptions — backgrounding and screen-off mid-import, panic lock, killing the app, rotation, low storage — now runs before every release alongside the security review. That testing found the crash above.
+
 ## [0.10.0] - 2026-10-24
 
 ### Added
@@ -234,7 +252,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/shahabcodes/Obscura/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/shahabcodes/Obscura/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shahabcodes/Obscura/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/shahabcodes/Obscura/compare/v0.7.0...v0.8.0

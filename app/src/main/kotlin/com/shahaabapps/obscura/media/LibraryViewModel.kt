@@ -11,6 +11,8 @@ import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +22,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
-import javax.inject.Inject
 
 data class Library(
     val loaded: Boolean = false,
@@ -63,6 +63,13 @@ class LibraryViewModel @Inject constructor(private val session: VaultSession) : 
     suspend fun thumbnail(file: VaultFile): Bitmap? = session.openVault?.thumbnails?.thumbnail(file)
 
     fun open(file: VaultFile) = session.openVault?.files?.open(file)
+
+    /** Random-access PDF bytes for the viewer, or null when the vault is locked. */
+    fun pdfSource(file: VaultFile): PdfSource? {
+        val vault = session.openVault ?: return null
+        // Tied to this vault: reading stops when it locks, and never resumes in another one.
+        return vault.pdfSource(file) { session.openVault === vault }
+    }
 
     fun shred(file: VaultFile, onDone: () -> Unit = {}) {
         viewModelScope.launch {
