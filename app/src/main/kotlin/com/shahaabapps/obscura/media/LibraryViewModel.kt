@@ -24,6 +24,14 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Where the GIF being made from a video has got to. */
+data class GifMaking(
+    val running: Boolean = false,
+    val fraction: Float = 0f,
+    val saved: String? = null,
+    val error: String? = null,
+)
+
 data class Library(
     val loaded: Boolean = false,
     val videos: List<VaultFile> = emptyList(),
@@ -33,7 +41,49 @@ data class Library(
 
 /** Videos, audio and documents, plus what the players need to read sealed files. */
 @HiltViewModel
-class LibraryViewModel @Inject constructor(private val session: VaultSession) : ViewModel() {
+class LibraryViewModel @Inject constructor(
+    private val session: VaultSession,
+    private val autoLock: com.shahaabapps.obscura.vault.AutoLock,
+) : ViewModel() {
+
+    private val _gif = kotlinx.coroutines.flow.MutableStateFlow(GifMaking())
+
+    /** Progress of turning a stretch of video into a GIF. */
+    val gif: StateFlow<GifMaking> = _gif
+
+    /**
+     * Makes a GIF from [video] starting at [startMs] and sealing it into the vault. The vault is
+     * held open while it runs, because reading the frames takes a few seconds.
+     */
+    fun makeGif(video: VaultFile, startMs: Long, lengthMs: Long) {
+        if (_gif.value.running) return
+        val vault = session.openVault ?: return
+        _gif.value = GifMaking(running = true)
+        viewModelScope.launch {
+            autoLock.hold()
+            try {
+                val gif = VideoToGif.create(
+                    vault = vault,
+                    video = video,
+                    request = GifRequest(startMs, lengthMs),
+                    stillOpen = { session.openVault === vault },
+                ) { done -> _gif.value = GifMaking(running = true, fraction = done) }
+                _gif.value = GifMaking(saved = gif.name)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Leaving the screen or locking the vault: not a failure to report.
+                _gif.value = GifMaking()
+                throw e
+            } catch (e: Exception) {
+                _gif.value = GifMaking(error = "The GIF couldn't be made: ${e.message}")
+            } finally {
+                autoLock.release()
+            }
+        }
+    }
+
+    fun dismissGif() {
+        if (!_gif.value.running) _gif.value = GifMaking()
+    }
 
     private val byId = ConcurrentHashMap<String, VaultFile>()
 

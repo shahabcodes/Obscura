@@ -103,4 +103,43 @@ class GifsAndDeleteTest {
         assertFalse("and its files with it", store.blobDir.exists())
         assertEquals(VaultState.NoVault, entry.session().state.value)
     }
+
+    /**
+     * Starting over in the same sitting. The new vault has new keys, so anything left behind by
+     * the old one — above all its encrypted index — must be gone rather than reopened with a key
+     * that cannot read it.
+     */
+    @Test
+    fun aNewVaultCanBeMadeStraightAfterDeletingTheOldOne() = runBlocking {
+        entry.session().create(passphrase.toCharArray())
+        entry.session().openVault!!.files.put(
+            gifBytes.inputStream(),
+            IncomingFile("first.gif", "image/gif", 1_700_000_000_000),
+        )
+        assertEquals(UnlockResult.Success, entry.session().deleteVault(passphrase.toCharArray()))
+
+        // A different passphrase, so a surviving index would be unreadable rather than merely stale.
+        val second = "harbour lantern cobalt meadow pigment"
+        entry.session().create(second.toCharArray())
+        val vault = entry.session().openVault!!
+        assertTrue(entry.session().state.value is VaultState.Unlocked)
+        assertEquals("the new vault starts empty", 0, vault.database.files().all().size)
+
+        val sealed = vault.files.put(
+            gifBytes.inputStream(),
+            IncomingFile("second.gif", "image/gif", 1_700_000_000_000),
+        )
+        assertEquals(listOf("second.gif"), vault.database.files().all().map { it.name })
+        // And it reads back, so the new key and the new index agree.
+        assertEquals(
+            gifBytes.toList(),
+            vault.files.open(vault.database.files().get(sealed.id)!!).use { it.readBytes() }.toList(),
+        )
+
+        // Locking and unlocking the new vault works, and the old passphrase does not open it.
+        entry.session().lock()
+        assertTrue(entry.session().unlockWithPassphrase(passphrase.toCharArray()) is UnlockResult.Wrong)
+        assertEquals(UnlockResult.Success, entry.session().unlockWithPassphrase(second.toCharArray()))
+        assertEquals(1, entry.session().openVault!!.database.files().all().size)
+    }
 }

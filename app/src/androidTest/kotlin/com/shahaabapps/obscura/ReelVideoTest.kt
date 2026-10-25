@@ -180,6 +180,37 @@ class ReelVideoTest {
         assertTrue("the timer cut the video off at the slideshow interval", shows("1 OF 2"))
     }
 
+    /**
+     * The picture keeps the video's own shape. Filling the screen with a 4:3 video on a tall
+     * phone stretches it, which is what this guards against.
+     */
+    @Test
+    fun theVideoIsNotStretchedToFillTheScreen() {
+        seed(encodeMp4(4))
+        openGallery()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Reel mode").performClick()
+        fun step() {
+            compose.mainClock.advanceTimeByFrame()
+            Thread.sleep(16)
+        }
+        val deadline = System.currentTimeMillis() + 30_000
+        while (!exists("Playing clip.mp4")) {
+            check(System.currentTimeMillis() < deadline) { "the video never started playing" }
+            step()
+        }
+        repeat(30) { step() } // let the player report its size and the layout settle
+
+        val bounds = compose.onNode(hasContentDescription("Playing clip.mp4", substring = true))
+            .fetchSemanticsNode().boundsInRoot
+        val shown = bounds.width / bounds.height
+        val real = 320f / 240f
+        assertTrue(
+            "shown at ${bounds.width.toInt()}x${bounds.height.toInt()} (%.2f) but the video is %.2f".format(shown, real),
+            kotlin.math.abs(shown - real) < 0.1f,
+        )
+    }
+
     /** Once the video really ends, the reel moves on by itself. */
     @Test
     fun theReelMovesOnWhenAVideoEnds() {

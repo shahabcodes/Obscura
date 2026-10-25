@@ -8,6 +8,24 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-25
+
+### Added
+- **Make a GIF from a video.** In the video player, pause where you want it to start, tap GIF, and pick 2, 3 or 5 seconds. The GIF is sealed into your vault like any other file and appears under GIFs. It never leaves the phone: the frames are read straight out of the encrypted video and the GIF is built in memory, with nothing written to storage along the way.
+  - Obscura writes the GIF itself rather than adding a library for it, so the app gains no new dependency and still has no way to reach the network.
+  - The GIF keeps the video's shape and is scaled to a sensible size, with one set of colours chosen across the whole clip so the file stays small.
+
+### Fixed
+- **Videos were stretched or squeezed.** The picture filled whatever space it was given, so a 4:3 video looked wrong on a tall phone. Videos now keep their own shape in reel mode and in the video player, including full screen.
+- **A video shot holding the phone upright was recorded on its side.** A phone stores such a video as a landscape picture plus a quarter turn, and Obscura noted down the landscape figures. The details line now reads the right way round, and the player no longer squeezes the picture in the moment before it has read the file.
+- A GIF made near the end of a video is now as long as the video has left, rather than repeating one frozen frame to fill the time asked for.
+- The GIF now comes from the clip you were watching at the moment you tapped, even if the player would otherwise have moved on to the next video, and the video pauses while you choose.
+- While a GIF is being made, its sheet can no longer be swiped away, which used to leave it working out of sight with no way back to it.
+- A video with no recorded length no longer produces a GIF a fifth of a second long.
+
+### Tests
+- 128 unit tests and 150 on-device tests. The GIF writer is checked against Android's own decoder, pixel for pixel, including a large noisy frame — the case that exercises the compressor's hardest path. The conversion is checked end to end: a real video in, an animated GIF sealed in the vault out, at the video's own shape, including a clip asked for past its end and a file whose frames cannot be read at all. Separate tests measure the picture on screen against the video's real shape, check that a video shot upright is recorded upright, and make a new vault straight after deleting the old one.
+
 ## [0.11.0] - 2026-10-25
 
 ### Added
@@ -272,7 +290,8 @@ section as the GitHub release notes.
 - Offline and privacy hardening: network permissions stripped from the manifest and checked on every build, Google backup and device transfer disabled, screenshots and the recents preview blocked.
 - GitHub Actions: CI build and tests on every push, and signed releases that attach `Obscura_<version>.apk`.
 
-[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/shahabcodes/Obscura/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/shahabcodes/Obscura/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/shahabcodes/Obscura/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/shahabcodes/Obscura/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/shahabcodes/Obscura/compare/v0.9.0...v0.10.0

@@ -71,7 +71,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
+import com.shahaabapps.obscura.media.FitVideo
 import com.shahaabapps.obscura.media.PlaybackState
+import com.shahaabapps.obscura.media.aspectOrNull
 import com.shahaabapps.obscura.media.mediaItem
 import com.shahaabapps.obscura.media.rememberPlaybackState
 import com.shahaabapps.obscura.media.rememberVaultPlayer
@@ -172,6 +174,7 @@ fun ReelScreen(viewModel: GalleryViewModel, startId: String, onClose: () -> Unit
                 showPlayIcon = chrome,
                 isCurrent = page == pager.settledPage,
                 paused = paused,
+                videoAspect = if (playback.error != null) null else playback.videoSize.aspectOrNull(),
                 onDoubleTap = {
                     if (!files[page].favorite) viewModel.setFavorite(files[page], true)
                     burstKey++
@@ -299,6 +302,7 @@ private fun ReelPage(
     showPlayIcon: Boolean,
     isCurrent: Boolean,
     paused: Boolean,
+    videoAspect: Float?,
     onDoubleTap: () -> Unit,
     onTap: () -> Unit,
 ) {
@@ -329,15 +333,19 @@ private fun ReelPage(
     ) {
         when {
             isVideo && player != null -> {
-                AndroidView(
-                    factory = { context ->
-                        SurfaceView(context).apply {
-                            setSecure(true) // decrypted frames stay out of screenshots
-                            player.setVideoSurfaceView(this)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize().semantics { contentDescription = "Playing ${file.name}" },
-                )
+                // Shown at the video's own shape: filling the screen would stretch it.
+                val aspect = videoAspect ?: file.width?.let { w -> file.height?.takeIf { it > 0 }?.let { h -> w.toFloat() / h } }
+                FitVideo(aspect, Modifier.fillMaxSize()) { fitted ->
+                    AndroidView(
+                        factory = { context ->
+                            SurfaceView(context).apply {
+                                setSecure(true) // decrypted frames stay out of screenshots
+                                player.setVideoSurfaceView(this)
+                            }
+                        },
+                        modifier = fitted.semantics { contentDescription = "Playing ${file.name}" },
+                    )
+                }
             }
             isGif -> {
                 (full ?: preview)?.let {

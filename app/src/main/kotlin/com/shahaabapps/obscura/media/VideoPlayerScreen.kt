@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -34,18 +36,23 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Forward10
+import androidx.compose.material.icons.outlined.Gif
 import androidx.compose.material.icons.outlined.Replay10
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,6 +72,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.shahaabapps.obscura.ui.components.ImmersiveMode
+import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.gallery.ShredDialog
 import com.shahaabapps.obscura.ui.gallery.formatDuration
@@ -74,6 +82,7 @@ import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
 import com.shahaabapps.obscura.vault.VaultFile
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -> Unit) {
     val library by viewModel.library.collectAsStateWithLifecycle()
@@ -96,11 +105,19 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     // Tap the picture to get everything else out of the way; tap again to bring it back.
     var chrome by rememberSaveable { mutableStateOf(true) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
+    var makingGif by remember { mutableStateOf(false) }
+    var gifFrom by remember { mutableStateOf<Pair<VaultFile, Long>?>(null) }
+    val gif by viewModel.gif.collectAsStateWithLifecycle()
 
     ImmersiveMode(!chrome)
+    // The player reports the true shape once it has read the file; until then, and if it never
+    // does, the dimensions recorded when the file was sealed keep the picture from being squeezed.
+    val storedAspect = current.width?.let { w -> current.height?.takeIf { it > 0 }?.let { h -> w.toFloat() / h } }
+    val aspect = playback.videoSize.aspectOrNull() ?: storedAspect
+
     if (!chrome) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoStage(player, playback, Modifier.fillMaxSize()) { chrome = true }
+            VideoStage(player, playback, aspect, Modifier.fillMaxSize()) { chrome = true }
         }
         BackHandler { chrome = true }
         return
@@ -122,10 +139,11 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             )
         }
 
-        val ratio = playback.videoSize.let { if (it.width > 0 && it.height > 0) it.width * it.pixelWidthHeightRatio / it.height else 16f / 9f }
+        val ratio = aspect ?: (16f / 9f)
         VideoStage(
             player = player,
             playback = playback,
+            aspect = aspect,
             modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).aspectRatio(ratio.coerceIn(0.5f, 2.4f)).clip(RoundedCornerShape(26.dp)),
             onTap = { chrome = false },
         )
@@ -142,6 +160,17 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 )
             }
             Spacer(Modifier.width(10.dp))
+            RoundIconButton(Icons.Outlined.Gif, "Make a GIF", {
+                viewModel.dismissGif()
+                // Pinned here: the player moves on by itself, and the GIF must come from the clip
+                // and the moment the user was actually looking at. The playhead is read from the
+                // player rather than from the screen's state, which is a snapshot up to a quarter
+                // of a second old, so the GIF starts where the picture really stopped.
+                player.pause()
+                gifFrom = current to player.currentPosition.coerceAtLeast(0)
+                makingGif = true
+            })
+            Spacer(Modifier.width(8.dp))
             RoundIconButton(Icons.Outlined.DeleteForever, "Shred", { confirmShred = current }, content = Prism.Orange)
         }
 
@@ -189,12 +218,93 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
         }
     }
 
+    if (makingGif) {
+        // Read inside the refusal below, so it sees how things stand now rather than how they
+        // stood when the sheet opened.
+        val running by rememberUpdatedState(gif.running)
+        ModalBottomSheet(
+            onDismissRequest = { if (!running) makingGif = false },
+            // Swiping down settles the sheet out of sight whether the request is honoured or not,
+            // which would leave the GIF being made with no way back to its progress. While it is
+            // running the sheet simply refuses to go.
+            sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = true,
+                confirmValueChange = { it != SheetValue.Hidden || !running },
+            ),
+            containerColor = Prism.Surface,
+        ) {
+            val (source, from) = gifFrom ?: (current to playback.positionMs)
+            MakeGifSheet(
+                state = gif,
+                name = source.name,
+                fromMs = from,
+                onCreate = { length -> viewModel.makeGif(source, from, length) },
+                onClose = {
+                    makingGif = false
+                    gifFrom = null
+                    viewModel.dismissGif()
+                },
+            )
+        }
+    }
+
     confirmShred?.let { file ->
         ShredDialog(file, onDismiss = { confirmShred = null }) {
             confirmShred = null
             // Leaving the queue behind: the player reloads from what is left.
             player.pause()
             viewModel.shred(file) { if (videos.size <= 1) onBack() }
+        }
+    }
+}
+
+/** Picks how much of the video to turn into a GIF, then shows how it is getting on. */
+@Composable
+private fun MakeGifSheet(state: GifMaking, name: String, fromMs: Long, onCreate: (Long) -> Unit, onClose: () -> Unit) {
+    var length by remember { mutableStateOf(GifRequest.lengths[1]) }
+    Column(
+        Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("Make a GIF", style = PrismType.heading, color = Prism.Paper)
+        when {
+            state.saved != null -> {
+                Text(
+                    "Saved as \"${state.saved}\" in your vault, under GIFs. It is sealed like everything else.",
+                    style = PrismType.body,
+                    color = Prism.Mint,
+                )
+                PillButton("Done", onClick = onClose, container = Prism.Mint)
+            }
+            state.running -> {
+                Text("Reading the frames and choosing colours…", style = PrismType.body, color = Prism.Muted)
+                Box(Modifier.fillMaxWidth().height(12.dp).clip(CircleShape).background(Prism.SurfaceHigh)) {
+                    Box(Modifier.fillMaxWidth(state.fraction.coerceIn(0f, 1f)).fillMaxHeight().background(Prism.Sun))
+                }
+                Text("${(state.fraction * 100).toInt()}%", style = PrismType.label, color = Prism.Muted)
+            }
+            else -> {
+                Text(
+                    "From \"$name\" at ${formatDuration(fromMs)}, where you paused it. The GIF is sealed into your vault; nothing leaves the phone.",
+                    style = PrismType.body,
+                    color = Prism.Muted,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GifRequest.lengths.forEach { option ->
+                        val on = length == option
+                        Text(
+                            "${option / 1000}s",
+                            style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight),
+                            color = if (on) Prism.Ink else Prism.Paper,
+                            modifier = Modifier.clip(CircleShape).background(if (on) Prism.Paper else Prism.SurfaceHigh)
+                                .selectable(selected = on, role = Role.RadioButton) { length = option }
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                        )
+                    }
+                }
+                state.error?.let { Text(it, style = PrismType.body, color = Prism.Orange) }
+                PillButton("Make the GIF", onClick = { onCreate(length) })
+            }
         }
     }
 }
@@ -208,6 +318,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
 private fun VideoStage(
     player: androidx.media3.exoplayer.ExoPlayer,
     playback: PlaybackState,
+    aspect: Float?,
     modifier: Modifier,
     onTap: () -> Unit,
 ) {
@@ -246,20 +357,22 @@ private fun VideoStage(
             },
         contentAlignment = Alignment.Center,
     ) {
-        AndroidView(
-            factory = { context ->
-                SurfaceView(context).apply {
-                    setSecure(true) // keep decrypted frames out of screenshots and recordings
-                    player.setVideoSurfaceView(this)
-                }
-            },
-            modifier = Modifier.fillMaxSize().graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                translationX = offset.x
-                translationY = offset.y
-            },
-        )
+        FitVideo(aspect, Modifier.fillMaxSize()) { fitted ->
+            AndroidView(
+                factory = { context ->
+                    SurfaceView(context).apply {
+                        setSecure(true) // keep decrypted frames out of screenshots and recordings
+                        player.setVideoSurfaceView(this)
+                    }
+                },
+                modifier = fitted.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                },
+            )
+        }
         if (!playback.isPlaying) {
             Box(
                 Modifier.size(68.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.8f))

@@ -74,7 +74,17 @@ class MetadataReader(private val context: Context, private val now: () -> Long =
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
-            return MediaInfo(date ?: fallback, width, height, duration)
+            // A phone holds a portrait video as a landscape picture plus a quarter turn, so the
+            // coded sides are the wrong way round. Record the shape as it is actually shown,
+            // which is what both the details line and the player's fallback shape expect.
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val turned = rotation == 90 || rotation == 270
+            return MediaInfo(
+                date ?: fallback,
+                if (turned) height else width,
+                if (turned) width else height,
+                duration,
+            )
         } finally {
             retriever.release()
         }
