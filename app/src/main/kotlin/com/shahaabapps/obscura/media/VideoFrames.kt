@@ -4,7 +4,9 @@ import android.media.MediaCodec
 import android.media.MediaDataSource
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.os.SystemClock
 import java.io.Closeable
+import kotlinx.coroutines.CancellationException
 
 /**
  * Reads frames out of a video by playing it through once, rather than seeking to each one.
@@ -62,6 +64,7 @@ internal class VideoFrames(private val source: MediaDataSource) : Closeable {
         targetsUs: LongArray,
         width: Int,
         height: Int,
+        keepGoing: () -> Boolean = { true },
         onFrame: (index: Int, pixels: IntArray) -> Boolean,
     ): Int {
         if (targetsUs.isEmpty()) return 0
@@ -84,8 +87,17 @@ internal class VideoFrames(private val source: MediaDataSource) : Closeable {
         var next = 0
         var fedEverything = false
         var handed = 0
+        // A decoder that stops producing without ever saying so would otherwise spin here for
+        // good, and this loop holds the vault open while it runs.
+        var lastProgress = SystemClock.elapsedRealtime()
 
         while (next < targetsUs.size) {
+            // Asked every time round, not only when a frame arrives: a long stretch between
+            // keyframes can decode for a while, and a vault that has locked must stop now.
+            if (!keepGoing()) throw CancellationException("Stopped while reading the video")
+            if (SystemClock.elapsedRealtime() - lastProgress > STALL_MS) {
+                throw IllegalStateException("This video stopped partway through being read")
+            }
             if (!fedEverything) {
                 val input = codec.dequeueInputBuffer(TIMEOUT_US)
                 if (input >= 0) {
@@ -97,6 +109,7 @@ internal class VideoFrames(private val source: MediaDataSource) : Closeable {
                     } else {
                         codec.queueInputBuffer(input, 0, size, extractor.sampleTime, 0)
                         extractor.advance()
+                        lastProgress = SystemClock.elapsedRealtime()
                     }
                 }
             }
@@ -104,6 +117,7 @@ internal class VideoFrames(private val source: MediaDataSource) : Closeable {
             val output = codec.dequeueOutputBuffer(info, TIMEOUT_US)
             when {
                 output >= 0 -> {
+                    lastProgress = SystemClock.elapsedRealtime()
                     val endOfStream = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                     var wanted = false
                     if (info.size > 0) {
@@ -137,9 +151,9 @@ internal class VideoFrames(private val source: MediaDataSource) : Closeable {
                 output == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     converter = YuvToRgb(codec.outputFormat, storedWidth, storedHeight)
                 }
-                output == MediaCodec.INFO_TRY_AGAIN_LATER && fedEverything -> {
-                    // Nothing more is coming.
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                output == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> {
+                    // Nothing to do; the buffers are fetched by index each time.
+                    lastProgress = SystemClock.elapsedRealtime()
                 }
             }
         }
@@ -155,6 +169,9 @@ internal class VideoFrames(private val source: MediaDataSource) : Closeable {
 
     private companion object {
         const val TIMEOUT_US = 10_000L
+
+        /** How long the decoder may say nothing at all before the video is given up on. */
+        const val STALL_MS = 8_000L
         const val COLOR_FormatYUV420Flexible = 0x7F420888
     }
 }

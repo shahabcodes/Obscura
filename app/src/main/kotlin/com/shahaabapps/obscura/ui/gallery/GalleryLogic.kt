@@ -35,6 +35,17 @@ sealed interface GalleryEntry {
     }
 }
 
+/**
+ * A month the gallery is showing and where it starts, for jumping straight to it.
+ *
+ * [entryIndex] is the month heading's place in the grid, so a jump lands exactly where the
+ * heading is. Taking these from the grid itself means the list of months always matches what is
+ * on screen: the chosen filter, the chosen sort, and nothing that was filtered out.
+ */
+data class MonthMark(val month: String, val year: String, val count: Int, val entryIndex: Int) {
+    val label: String get() = "$month $year"
+}
+
 /** Pure grouping and sorting, kept free of Android so it can be unit-tested. */
 object GalleryLogic {
 
@@ -104,4 +115,13 @@ object GalleryLogic {
 
     /** The flat order the viewer and reel page through. */
     fun flat(entries: List<GalleryEntry>): List<VaultFile> = entries.filterIsInstance<GalleryEntry.Item>().map { it.file }
+
+    /**
+     * The months [entries] holds, in the order they appear, each with where its heading sits.
+     * Empty when the gallery is not grouped by month, since then there is nothing to jump to.
+     */
+    fun months(entries: List<GalleryEntry>): List<MonthMark> =
+        entries.mapIndexedNotNull { index, entry ->
+            (entry as? GalleryEntry.Header)?.let { MonthMark(it.month, it.year, it.count, index) }
+        }
 }

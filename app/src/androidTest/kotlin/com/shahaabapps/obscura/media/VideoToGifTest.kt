@@ -217,7 +217,12 @@ class VideoToGifTest {
         }.exceptionOrNull()
 
         assertNotNull("rubbish should not quietly succeed", thrown)
-        assertTrue("got ${thrown!!::class.java.simpleName}: ${thrown.message}", thrown !is NullPointerException)
+        // A plain, named failure with something to show the user, not a crash from deep inside.
+        assertTrue(
+            "got ${thrown!!::class.java.simpleName}: ${thrown.message}",
+            thrown is IllegalStateException || thrown is java.io.IOException,
+        )
+        assertTrue("the message is empty", !thrown.message.isNullOrBlank())
         // And it left nothing half-sealed behind.
         assertEquals(1, vault.database.files().all().size)
     }
@@ -245,10 +250,46 @@ class VideoToGifTest {
                 assertTrue("a GIF of ${bytes.size} bytes", bytes.size > 100)
             },
             onFailure = { thrown ->
-                assertTrue("got ${thrown::class.java.simpleName}", thrown !is NullPointerException)
+                assertTrue(
+                    "got ${thrown::class.java.simpleName}: ${thrown.message}",
+                    thrown is IllegalStateException || thrown is java.io.IOException,
+                )
                 assertEquals(1, vault.database.files().all().size)
             },
         )
+    }
+
+    /**
+     * Locking the vault must stop the decoder there and then. The check used to happen only when
+     * a frame was handed over, so a long stretch between keyframes could keep reading a locked
+     * vault's video — and the hold it takes would keep the vault from locking at all.
+     */
+    @Test
+    fun lockingTheVaultStopsTheDecoderAtOnce() = runBlocking {
+        val video = sealVideo(encodeMp4(3))
+        val vault = entry.session().openVault!!
+
+        var open = true
+        var framesSeen = 0
+        val began = System.currentTimeMillis()
+        val thrown = runCatching {
+            VideoToGif.create(
+                vault = vault,
+                video = video,
+                request = GifRequest(startMs = 0, lengthMs = 3_000, fps = 10, maxWidth = 240),
+                stillOpen = {
+                    // Open just long enough to get going, then shut.
+                    if (framesSeen++ > 2) open = false
+                    open
+                },
+            )
+        }.exceptionOrNull()
+        val took = System.currentTimeMillis() - began
+
+        assertTrue("expected it to stop, got $thrown", thrown is kotlinx.coroutines.CancellationException)
+        assertTrue("took ${took}ms, which is too long to notice a lock", took < 15_000)
+        // Nothing half-sealed: the video is still the only thing in the vault.
+        assertEquals(1, vault.database.files().all().size)
     }
 
     /** A length past the end of the video is trimmed rather than failing. */

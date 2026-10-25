@@ -47,6 +47,12 @@ git config obscura.signing.keyAlias      '…'
 git config obscura.signing.keyPassword   '…'
 ```
 
+Note that git config stores these in cleartext in `.git/config`, like any other git setting. They
+are outside the working tree and never committed, but they are readable by anything that can read
+the repository directory and are printed by `git config --list`, so treat that file accordingly and
+leave `.git` out of any archive you share. Leaving the four values unset and exporting the
+`OBSCURA_*` variables instead keeps them out of any file.
+
 `./gradlew assembleRelease` then signs the APK. Without them the release build is left unsigned,
 which is what happens on anyone else's clone. The matching `OBSCURA_*` environment variables are
 read as a fallback, which is how the workflow signs with its secrets. Keep the keystore itself

@@ -75,7 +75,13 @@ object VideoToGif {
         val retriever = MediaMetadataRetriever()
         val source = EncryptedMediaDataSource(vault.keys.fileCipher, video, vault.files.blobFile(video.id))
         try {
-            retriever.setDataSource(source)
+            // A file that is not really a video throws whatever the platform feels like, down to
+            // a bare RuntimeException carrying a status code. None of that belongs on screen.
+            try {
+                retriever.setDataSource(source)
+            } catch (e: Exception) {
+                throw IllegalStateException("Obscura can't read this as a video", e)
+            }
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
                 ?: video.durationMs ?: 0L
             val start = request.startMs.coerceIn(0, maxOf(0, durationMs - 200))
@@ -99,19 +105,23 @@ object VideoToGif {
             val quantizer = Quantizer()
             val wantedForPalette = (0 until frames step maxOf(1, frames / 8)).take(8).toSet()
             var sampled = 0
-            VideoFrames(EncryptedMediaDataSource(vault.keys.fileCipher, video, vault.files.blobFile(video.id)))
-                .use { reader ->
-                    reader.read(start * 1000, targets, size.first, size.second) { index, pixels ->
-                        coroutineContext.ensureActive()
-                        check()
-                        if (index in wantedForPalette) {
-                            quantizer.sample(pixels)
-                            sampled++
-                            onProgress(0.25f * (sampled.toFloat() / wantedForPalette.size))
-                        }
-                        true
+            // Asked between frames as well as at them, so locking the vault stops the decoder
+            // rather than waiting for it to produce something.
+            val keepGoing = {
+                coroutineContext.ensureActive()
+                stillOpen()
+            }
+            openFrames(vault, video).use { reader ->
+                reader.read(start * 1000, targets, size.first, size.second, keepGoing) { index, pixels ->
+                    check()
+                    if (index in wantedForPalette) {
+                        quantizer.sample(pixels)
+                        sampled++
+                        onProgress(0.25f * (sampled.toFloat() / wantedForPalette.size))
                     }
+                    true
                 }
+            }
             check(sampled > 0) { "No frames could be read from this video" }
             val palette = quantizer.palette()
             val mapper = Quantizer.Mapper(palette)
@@ -121,19 +131,17 @@ object VideoToGif {
             val indices = ByteArray(size.first * size.second)
             val delayCentis = (100 / request.fps).coerceAtLeast(2)
             var written = 0
-            VideoFrames(EncryptedMediaDataSource(vault.keys.fileCipher, video, vault.files.blobFile(video.id)))
-                .use { reader ->
-                    reader.read(start * 1000, targets, size.first, size.second) { index, pixels ->
-                        coroutineContext.ensureActive()
-                        check()
-                        mapper.map(pixels, size.first, indices)
-                        encoder.addFrame(indices, delayCentis)
-                        check(out.size() <= GifRequest.MAX_BYTES) { "This clip makes too large a GIF; try a shorter one" }
-                        written++
-                        onProgress(0.25f + 0.7f * (index + 1f) / frames)
-                        true
-                    }
+            openFrames(vault, video).use { reader ->
+                reader.read(start * 1000, targets, size.first, size.second, keepGoing) { index, pixels ->
+                    check()
+                    mapper.map(pixels, size.first, indices)
+                    encoder.addFrame(indices, delayCentis)
+                    check(out.size() <= GifRequest.MAX_BYTES) { "This clip makes too large a GIF; try a shorter one" }
+                    written++
+                    onProgress(0.25f + 0.7f * (index + 1f) / frames)
+                    true
                 }
+            }
             check(written > 0) { "No frames could be read from this video" }
             encoder.finish()
 
@@ -145,6 +153,23 @@ object VideoToGif {
         } finally {
             runCatching { retriever.release() }
             runCatching { source.close() }
+        }
+    }
+
+    /**
+     * Opens a reader over the sealed video. If the reader cannot be built — a file that is not a
+     * video, or a container it cannot parse — the decrypting channel it was handed is closed
+     * here, since there is no reader to close it later.
+     */
+    private fun openFrames(vault: OpenVault, video: VaultFile): VideoFrames {
+        val source = EncryptedMediaDataSource(vault.keys.fileCipher, video, vault.files.blobFile(video.id))
+        return try {
+            VideoFrames(source)
+        } catch (e: Throwable) {
+            runCatching { source.close() }
+            // Cancellation is not a fault of the file and must travel on untouched.
+            if (e is kotlinx.coroutines.CancellationException || e is IllegalStateException) throw e
+            throw IllegalStateException("Obscura can't read this as a video", e)
         }
     }
 

@@ -86,4 +86,42 @@ class GalleryLogicTest {
         val items = entries.filterIsInstance<GalleryEntry.Item>()
         assertEquals(items.indices.toList(), items.map { it.position })
     }
+
+    @Test
+    fun theMonthsToJumpToAreTheHeadingsOnScreen() {
+        val entries = GalleryLogic.build(files, GallerySettings(), utc)
+        val months = GalleryLogic.months(entries)
+
+        assertEquals(listOf("October 2026", "September 2026", "August 2026"), months.map { it.label })
+        assertEquals(listOf(2, 1, 1), months.map { it.count })
+        // Each one points at its own heading, so a jump lands on the month it names.
+        months.forEach { mark ->
+            val heading = entries[mark.entryIndex] as GalleryEntry.Header
+            assertEquals(mark.month, heading.month)
+            assertEquals(mark.year, heading.year)
+        }
+    }
+
+    @Test
+    fun jumpingOffersOnlyTheMonthsThisFilterLeaves() {
+        val entries = GalleryLogic.build(files, GallerySettings(filter = GalleryFilter.VIDEOS), utc)
+        val months = GalleryLogic.months(entries)
+        // Only one video, in October, so September and August are not offered at all.
+        assertEquals(listOf("October 2026"), months.map { it.label })
+        assertEquals(0, months.single().entryIndex)
+    }
+
+    @Test
+    fun theOldestMonthIsFirstWhenSortingTheOtherWay() {
+        val entries = GalleryLogic.build(files, GallerySettings(descending = false), utc)
+        val months = GalleryLogic.months(entries)
+        assertEquals(listOf("August 2026", "September 2026", "October 2026"), months.map { it.label })
+        assertEquals("August", (entries[months.first().entryIndex] as GalleryEntry.Header).month)
+    }
+
+    @Test
+    fun thereIsNothingToJumpToWhenMonthsAreTurnedOff() {
+        val entries = GalleryLogic.build(files, GallerySettings(groupByMonth = false), utc)
+        assertTrue(GalleryLogic.months(entries).isEmpty())
+    }
 }

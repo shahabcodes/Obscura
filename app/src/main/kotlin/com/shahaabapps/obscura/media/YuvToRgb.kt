@@ -87,10 +87,15 @@ internal class YuvToRgb(format: MediaFormat, sourceWidth: Int, sourceHeight: Int
                 val x = (sourceX + crop.left).coerceIn(0, crop.right - 1)
                 val yy = (sourceY + crop.top).coerceIn(0, crop.bottom - 1)
 
-                val luma = yBuffer.get(yy * yRow + x * yPixel).toInt() and 0xFF
-                val half = (yy shr 1) * uRow + (x shr 1) * uPixel
-                val blue = uBuffer.get(half).toInt() and 0xFF
-                val red = vBuffer.get((yy shr 1) * vRow + (x shr 1) * vPixel).toInt() and 0xFF
+                // Colour is stored at half resolution, so it is the position within the crop
+                // that is halved; halving the offset as well would shift the colour sideways.
+                val chromaX = (sourceX shr 1) + (crop.left shr 1)
+                val chromaY = (sourceY shr 1) + (crop.top shr 1)
+                // A codec that reports a crop larger than its own buffers would otherwise throw
+                // partway through a GIF; a clamped sample costs a wrong edge pixel instead.
+                val luma = yBuffer.at(yy * yRow + x * yPixel)
+                val blue = uBuffer.at(chromaY * uRow + chromaX * uPixel)
+                val red = vBuffer.at(chromaY * vRow + chromaX * vPixel)
 
                 val base = ((if (fullRange) luma else luma - 16).coerceAtLeast(0)) * yScale
                 val cb = blue - 128
@@ -107,6 +112,10 @@ internal class YuvToRgb(format: MediaFormat, sourceWidth: Int, sourceHeight: Int
     }
 
     private companion object {
+        /** Reads a byte as an unsigned value, never past the end of the plane. */
+        fun java.nio.ByteBuffer.at(index: Int): Int =
+            get(index.coerceIn(0, limit() - 1)).toInt() and 0xFF
+
         const val SHIFT = 10
         const val ONE = 1 shl SHIFT
 

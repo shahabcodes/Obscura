@@ -8,6 +8,26 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-25
+
+### Added
+- **Jump to a month.** A calendar button in the gallery lists every month you have files from, gathered under its year with a count, and takes you straight there. It follows whatever filter you are on, so asking for videos lists only the months that have videos. It appears once there is more than one month to choose between.
+
+### Changed
+- **GIFs look much closer to the video they came from.** The palette was chosen by counting shades rather than pixels, so a wide smooth background — a sky, a wall, a blurred backdrop — collapsed into a few flat patches, while a handful of stray colours each took a slot of their own. Colours are now chosen by how much of the picture they actually cover, and what rounding is left is dithered, which turns banding into a fine texture that reads as the shade in between. On a test clip the average pixel is a little over twice as close to the original.
+- **Making a GIF is about three times faster.** Frames were fetched one at a time, and asking a video for an arbitrary moment means decoding everything from the keyframe before it, so a twenty-frame GIF decoded hundreds of frames. Obscura now plays the clip straight through once instead.
+- GIFs are roughly twice the size as a result of the dithering, which is the price of the smoother picture.
+- A video damaged part way through now yields a GIF of the frames that survived, rather than refusing the whole clip.
+
+### Fixed
+- A file that is not really a video used to answer with the platform's own error text, status code and all. It now says plainly that Obscura can't read it as a video.
+- Turning the phone while making a GIF no longer takes the sheet, the progress and the confirmation with it.
+- Locking the vault now stops the decoder immediately rather than at the next frame, and a video that stops responding is given up on instead of being read forever. Both mattered because reading a video holds the vault open while it runs.
+- A damaged or non-video file no longer leaves its reader open; repeatedly trying one could previously use up the app's file handles.
+
+### Tests
+- 132 unit tests and 175 on-device tests. A new measurement compares a GIF against the video it came from, pixel by pixel, and records how long it took, so neither the colours nor the speed can quietly slip back. Others cover awkward videos — very short, started past the end, portrait with a rotation flag, odd sizes, truncated, audio-only, and files that are not videos at all — and what happens when a GIF is interrupted by a lock, a cancel or a second GIF at once, each checking that nothing readable is left behind. The jump-to-month list is checked against the headings actually on screen, under every filter and both sort directions, including when the filter changes or files vanish while it is open.
+
 ## [0.12.0] - 2026-10-25
 
 ### Added

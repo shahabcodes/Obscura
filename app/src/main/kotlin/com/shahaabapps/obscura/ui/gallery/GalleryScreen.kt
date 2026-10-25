@@ -12,6 +12,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -33,11 +36,13 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -60,6 +65,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,6 +91,7 @@ import com.shahaabapps.obscura.vault.FileKind
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,6 +108,9 @@ fun GalleryScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
+    val months by remember(state.entries) { derivedStateOf { GalleryLogic.months(state.entries) } }
+    var jumpOpen by remember { mutableStateOf(false) }
     val selecting by viewModel.selecting.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val export by viewModel.export.collectAsStateWithLifecycle()
@@ -138,6 +148,10 @@ fun GalleryScreen(
                     Column(Modifier.weight(1f)) {
                         Text("Gallery", style = PrismType.title, color = Prism.Paper)
                         Text("%,d ITEMS · SEALED".format(state.totalMedia), style = PrismType.label, color = Prism.Muted)
+                    }
+                    if (months.size > 1) {
+                        RoundIconButton(Icons.Outlined.CalendarMonth, "Jump to a month", { jumpOpen = true })
+                        Spacer(Modifier.width(8.dp))
                     }
                     RoundIconButton(Icons.Outlined.CheckCircle, "Select", viewModel::startSelecting)
                     Spacer(Modifier.width(8.dp))
@@ -181,6 +195,17 @@ fun GalleryScreen(
                     )
                 }
             }
+        }
+
+        if (jumpOpen) {
+            JumpToMonthSheet(
+                months = months,
+                onPick = { mark ->
+                    jumpOpen = false
+                    scope.launch { gridState.scrollToItem(mark.entryIndex) }
+                },
+                onClose = { jumpOpen = false },
+            )
         }
 
         Box(Modifier.weight(1f)) {
@@ -319,6 +344,63 @@ private fun ShortcutTile(title: String, tag: String, color: Color, modifier: Mod
                 Text(tag, style = PrismType.label.copy(fontSize = PrismType.label.fontSize * 0.85f))
             }
         }
+    }
+}
+
+/**
+ * Every month in the gallery, newest first and gathered under its year, so a photo from years
+ * back is two taps away instead of a long scroll.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun JumpToMonthSheet(months: List<MonthMark>, onPick: (MonthMark) -> Unit, onClose: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Prism.Surface,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Jump to a month", style = PrismType.heading, color = Prism.Paper)
+            Text(
+                "%,d months in this view".format(months.size),
+                style = PrismType.label,
+                color = Prism.Muted,
+            )
+            Column(
+                Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                months.groupBy { it.year }.forEach { (year, inYear) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(year, style = PrismType.label, color = Prism.Muted)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            inYear.forEach { mark -> MonthChoice(mark, onPick) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One month to jump to, with how many items are in it. */
+@Composable
+private fun MonthChoice(mark: MonthMark, onPick: (MonthMark) -> Unit) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Prism.SurfaceHigh)
+            .clickable { onPick(mark) }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text(mark.month, style = PrismType.body, color = Prism.Paper)
+        Text("%,d".format(mark.count), style = PrismType.label, color = Prism.Muted)
     }
 }
 

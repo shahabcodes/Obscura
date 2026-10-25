@@ -105,8 +105,11 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     // Tap the picture to get everything else out of the way; tap again to bring it back.
     var chrome by rememberSaveable { mutableStateOf(true) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
-    var makingGif by remember { mutableStateOf(false) }
-    var gifFrom by remember { mutableStateOf<Pair<VaultFile, Long>?>(null) }
+    // Kept across a turn of the phone, which rebuilds the screen: losing the sheet mid-GIF
+    // would leave the work running with no progress and no word of where it went.
+    var makingGif by rememberSaveable { mutableStateOf(false) }
+    var gifFromId by rememberSaveable { mutableStateOf<String?>(null) }
+    var gifFromMs by rememberSaveable { mutableStateOf(0L) }
     val gif by viewModel.gif.collectAsStateWithLifecycle()
 
     ImmersiveMode(!chrome)
@@ -167,7 +170,8 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 // player rather than from the screen's state, which is a snapshot up to a quarter
                 // of a second old, so the GIF starts where the picture really stopped.
                 player.pause()
-                gifFrom = current to player.currentPosition.coerceAtLeast(0)
+                gifFromId = current.id
+                gifFromMs = player.currentPosition.coerceAtLeast(0)
                 makingGif = true
             })
             Spacer(Modifier.width(8.dp))
@@ -218,7 +222,9 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
         }
     }
 
-    if (makingGif) {
+    // Still shown after a turn of the phone while there is something to say, since the work
+    // itself lives in the view model and carries on regardless.
+    if (makingGif || gif.running || gif.saved != null) {
         // Read inside the refusal below, so it sees how things stand now rather than how they
         // stood when the sheet opened.
         val running by rememberUpdatedState(gif.running)
@@ -233,7 +239,8 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             ),
             containerColor = Prism.Surface,
         ) {
-            val (source, from) = gifFrom ?: (current to playback.positionMs)
+            val source = videos.firstOrNull { it.id == gifFromId } ?: current
+            val from = if (gifFromId != null) gifFromMs else playback.positionMs
             MakeGifSheet(
                 state = gif,
                 name = source.name,
@@ -241,7 +248,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 onCreate = { length -> viewModel.makeGif(source, from, length) },
                 onClose = {
                     makingGif = false
-                    gifFrom = null
+                    gifFromId = null
                     viewModel.dismissGif()
                 },
             )

@@ -303,6 +303,7 @@ class Quantizer(private val maxColours: Int = 256) {
         fun map(pixels: IntArray, width: Int, into: ByteArray) {
             if (width <= 0) return
             val height = pixels.size / width
+            require(into.size >= width * height) { "Expected room for ${width * height} pixels, got ${into.size}" }
             // What the pixels of this row and the next are still owed, three channels each.
             var thisRow = IntArray(width * 3)
             var nextRow = IntArray(width * 3)
