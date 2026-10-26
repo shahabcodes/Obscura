@@ -135,7 +135,7 @@ class ExportInBackgroundTest {
         assertTrue("nothing told the user it was running", sawNotification)
         assertTrue("it stopped when the app was left", advancedWhileAway)
         assertEquals("every file was copied", 90, result.exported)
-        assertEquals(90, File(drive, ExportManager.FOLDER).walkTopDown().count { it.isFile })
+        assertEquals(90, File(drive, ExportManager.FOLDER).listFiles().orEmpty().count { it.isFile && it.name != ExportManager.INDEX })
     }
 
     /** The vault stays open while it runs, and locks again once it is done. */

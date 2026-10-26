@@ -104,6 +104,9 @@ abstract class AlbumDao {
 
     @Query("SELECT * FROM albums WHERE id = :id")
     abstract fun observe(id: String): Flow<Album?>
+
+    @Query("SELECT * FROM albums")
+    abstract suspend fun all(): List<Album>
 }
 
 @Dao

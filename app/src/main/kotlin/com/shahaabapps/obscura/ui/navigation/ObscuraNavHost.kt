@@ -112,14 +112,30 @@ fun ObscuraNavHost(
         }
     }
 
+    // The screen the user is actually on, with any id filled in, kept up to date so that
+    // locking has something to come back to.
+    val here = backStack?.let { entry ->
+        entry.destination.route?.let { route ->
+            val id = entry.arguments?.getString("id")
+            if (id != null && route.endsWith("/{id}")) route.removeSuffix("{id}") + id else route
+        }
+    }
+    LaunchedEffect(here, vaultState) {
+        (vaultState as? VaultState.Unlocked)?.let { open ->
+            LastPlace.remember(here, open.vault.isDecoy)
+        }
+    }
+
     // Whenever the vault locks (auto-lock, screen off, lock button), drop every screen that
-    // showed vault content and return to the lock screen.
+    // showed vault content and return to the lock screen. Nothing of the vault may sit behind
+    // the lock screen, so where the user was is held separately rather than on the back stack.
     LaunchedEffect(vaultState, current) {
         if (vaultState is VaultState.Locked && current != null && current !in Routes.lockedSafe) {
             navController.navigate(Routes.UNLOCK) { popUpTo(0) { inclusive = true } }
         }
         // Wipe-after-10 destroyed the vault: start over from the welcome screen.
         if (vaultState is VaultState.NoVault && current != null && current != Routes.WELCOME && !current.startsWith("setup") && current != Routes.RESTORE) {
+            LastPlace.forget()
             navController.navigate(Routes.WELCOME) { popUpTo(0) { inclusive = true } }
         }
     }
@@ -133,7 +149,7 @@ fun ObscuraNavHost(
                 )
             }
             setupGraph(navController)
-            unlockScreens(navController)
+            unlockScreens(navController) { session.openVault?.isDecoy == true }
             composable(Routes.HOME) {
                 val home: HomeViewModel = hiltViewModel()
                 val gallery: GalleryViewModel = hiltViewModel()
@@ -291,8 +307,17 @@ private fun setupViewModel(navController: NavHostController, entry: NavBackStack
     return hiltViewModel(parent)
 }
 
-private fun NavGraphBuilder.unlockScreens(navController: NavHostController) {
-    val toHome: () -> Unit = { navController.navigate(Routes.HOME) { popUpTo(0) { inclusive = true } } }
+private fun NavGraphBuilder.unlockScreens(navController: NavHostController, isDecoy: () -> Boolean) {
+    /**
+     * Back to where the user was when the vault locked, with home underneath so Back behaves.
+     * Anywhere that no longer exists — a file since shredded, say — simply shows home.
+     */
+    val toHome: () -> Unit = {
+        navController.navigate(Routes.HOME) { popUpTo(0) { inclusive = true } }
+        LastPlace.take(isDecoy())?.let { place ->
+            runCatching { navController.navigate(place) }
+        }
+    }
     composable(Routes.UNLOCK) {
         UnlockScreen(
             onUnlocked = toHome,

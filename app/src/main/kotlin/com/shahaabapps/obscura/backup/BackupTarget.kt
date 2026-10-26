@@ -34,6 +34,21 @@ interface BackupDir {
     fun directory(name: String): BackupDir
     /** Creates or overwrites a file; [mimeType] helps other apps recognise it. */
     fun write(name: String, mimeType: String = "application/octet-stream"): OutputStream
+
+    /**
+     * Creates a file the caller already knows is not there. Looking a name up means listing the
+     * whole folder, which is ruinous when thousands of files are written into one; a caller that
+     * is keeping track of the names itself can say so.
+     */
+    fun writeNew(name: String, mimeType: String = "application/octet-stream"): OutputStream =
+        write(name, mimeType)
+
+    /**
+     * Tries to give a written file its original date. Whether this is possible depends on where
+     * the folder lives: a folder picked through the system picker usually will not allow it,
+     * and there is no way to force it, so callers must not depend on it.
+     */
+    fun setModified(name: String, whenMillis: Long) = Unit
     fun delete(name: String)
     /** Free space at the destination, or null when it can't be told. */
     fun availableBytes(): Long? = null
@@ -62,6 +77,10 @@ class FileBackupDir(private val dir: File) : BackupDir {
     override fun directory(name: String): BackupDir = FileBackupDir(File(dir, name))
 
     override fun write(name: String, mimeType: String): OutputStream = File(dir, name).outputStream()
+
+    override fun setModified(name: String, whenMillis: Long) {
+        File(dir, name).setLastModified(whenMillis)
+    }
 
     override fun delete(name: String) {
         File(dir, name).deleteRecursively()
@@ -116,6 +135,27 @@ class SafBackupDir(
             ?: throw FileNotFoundException("Could not create $name")
         // "wt" truncates an existing file so a shorter rewrite leaves no stale tail.
         return resolver.openOutputStream(uri, "wt") ?: throw FileNotFoundException(name)
+    }
+
+    override fun writeNew(name: String, mimeType: String): OutputStream {
+        val uri = DocumentsContract.createDocument(resolver, parentUri, mimeType, name)
+            ?: throw FileNotFoundException("Could not create $name")
+        return resolver.openOutputStream(uri, "wt") ?: throw FileNotFoundException(name)
+    }
+
+    /**
+     * Most providers behind the picker, the one for phone storage and USB drives among them,
+     * have no way to set a document's date and simply refuse. Worth asking in case the folder
+     * is somewhere that allows it; the copy carries its own dates inside it either way.
+     */
+    override fun setModified(name: String, whenMillis: Long) {
+        runCatching {
+            val node = child(name) as? Node ?: return
+            val values = android.content.ContentValues().apply {
+                put(Document.COLUMN_LAST_MODIFIED, whenMillis)
+            }
+            resolver.update(node.uri, values, null, null)
+        }
     }
 
     override fun delete(name: String) {

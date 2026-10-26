@@ -96,10 +96,13 @@ class ExportResumeEdgesTest {
     /** The folder the export makes for itself inside the one that was picked. */
     private val exported get() = File(drive, ExportManager.FOLDER)
 
-    private fun monthDir(month: String) = File(exported, month)
+    /** Everything goes in the one folder now; the month is only how the date is kept. */
+    private fun monthDir(month: String) = exported
 
     private fun contentsOf(month: String): List<List<Byte>> =
-        monthDir(month).listFiles().orEmpty().filter { it.isFile }.map { it.readBytes().toList() }
+        monthDir(month).listFiles().orEmpty()
+            .filter { it.isFile && it.name != ExportManager.INDEX }
+            .map { it.readBytes().toList() }
 
     /**
      * The one that matters most. Two different files share a name and a size. A first run copies
@@ -119,7 +122,7 @@ class ExportResumeEdgesTest {
         // A complete run, to learn the two names it uses.
         assertEquals(2, exportAndWait().exported)
         val month = monthDir("2026-06")
-        val names = month.listFiles()!!.map { it.name }.sorted()
+        val names = month.listFiles()!!.filter { it.name != ExportManager.INDEX }.map { it.name }.sorted()
         assertEquals("two copies, under two names: $names", 2, names.size)
 
         // Now stand the destination where a killed run would have left it: the first copy
@@ -127,14 +130,14 @@ class ExportResumeEdgesTest {
         val secondCopy = month.listFiles()!!.first { it.name.contains("(2)") }
         val lost = secondCopy.readBytes().toList()
         assertTrue(secondCopy.delete())
-        assertEquals(1, month.listFiles()!!.size)
+        assertEquals(1, month.listFiles()!!.count { it.name != ExportManager.INDEX })
 
         // Carry on.
         val resumed = exportAndWait()
 
         assertEquals("both files must be accounted for", 2, resumed.done)
         assertEquals(0, resumed.failed)
-        val after = month.listFiles()!!.filter { it.isFile }
+        val after = month.listFiles()!!.filter { it.isFile && it.name != ExportManager.INDEX }
         assertEquals(
             "carrying on left only ${after.map { it.name }} — a file was lost " +
                 "(skipped=${resumed.skipped}, exported=${resumed.exported})",
@@ -198,7 +201,7 @@ class ExportResumeEdgesTest {
         assertEquals(0, result.failed)
         val got = contentsOf("2026-08")
         assertTrue("the whole file never came out (skipped=${result.skipped})", got.contains(whole.toList()))
-        val files = month.listFiles()!!.filter { it.isFile }
+        val files = month.listFiles()!!.filter { it.isFile && it.name != ExportManager.INDEX }
         assertEquals(
             "a truncated plaintext fragment was left behind as well: " +
                 files.map { "${it.name}:${it.length()}" },
@@ -218,13 +221,13 @@ class ExportResumeEdgesTest {
 
         assertEquals(2, exportAndWait().exported)
         val month = monthDir("2026-09")
-        val before = month.listFiles()!!.associate { it.name to it.length() }
+        val before = month.listFiles()!!.filter { it.name != ExportManager.INDEX }.associate { it.name to it.length() }
 
         val second = exportAndWait()
 
         assertEquals("nothing should have been copied again", 0, second.exported)
         assertEquals(2, second.done)
-        assertEquals("a third copy appeared", before, month.listFiles()!!.associate { it.name to it.length() })
+        assertEquals("a third copy appeared", before, month.listFiles()!!.filter { it.name != ExportManager.INDEX }.associate { it.name to it.length() })
     }
 
     /**
@@ -294,7 +297,7 @@ class ExportResumeEdgesTest {
         gone.set(false)
         val finished = exportAndWait()
         assertEquals("the second run reported failures: ${finished.error}", 0, finished.failed)
-        val copies = drive.walkTopDown().filter { it.isFile }.toList()
+        val copies = drive.walkTopDown().filter { it.isFile && it.name != ExportManager.INDEX }.toList()
         assertEquals("expected one copy of each, got ${copies.map { it.name }}", originals.size, copies.size)
         originals.forEach { (name, bytes) ->
             assertTrue(

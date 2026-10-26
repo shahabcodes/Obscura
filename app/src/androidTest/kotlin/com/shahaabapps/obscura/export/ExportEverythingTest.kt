@@ -95,9 +95,9 @@ class ExportEverythingTest {
         throw AssertionError("the export did not finish: ${entry.exportManager().progress.value}")
     }
 
-    /** Every file in the vault lands in a folder named for its month, byte for byte. */
+    /** Every file in the vault lands in the one folder, byte for byte. */
     @Test
-    fun everythingLandsInAFolderPerMonth() {
+    fun everythingLandsInTheOneFolder() {
         val written = mapOf(
             "one.bin" to Triple(Random(1).nextBytes(120_000), 2026, 10),
             "two.bin" to Triple(Random(2).nextBytes(90_000), 2026, 10),
@@ -112,11 +112,10 @@ class ExportEverythingTest {
         assertEquals(4, result.exported)
         assertEquals(0, result.failed)
         assertEquals(0, result.skipped)
-        assertEquals(setOf("2024-12", "2025-03", "2026-10"), exported.listFiles()!!.map { it.name }.toSet())
+
         written.forEach { (name, it) ->
-            val month = "%04d-%02d".format(it.second, it.third)
-            val copy = File(File(exported, month), name)
-            assertTrue("$name is missing from $month", copy.isFile)
+            val copy = File(exported, name)
+            assertTrue("$name is missing", copy.isFile)
             assertArrayEquals("$name came back changed", it.first, copy.readBytes())
         }
         // Exporting is a copy: everything is still sealed.
@@ -141,7 +140,7 @@ class ExportEverythingTest {
         awaitExport()
         // Whether the cancel landed before the last file or just after it does not matter here;
         // what matters is that running it again finishes the job without copying anything twice.
-        val copiedFirstTime = exported.walkTopDown().count { it.isFile }
+        val copiedFirstTime = exported.listFiles().orEmpty().count { it.isFile && it.name != ExportManager.INDEX }
         assertTrue("nothing was copied at all", copiedFirstTime >= 1)
 
         // Again, into the same folder.
@@ -156,7 +155,7 @@ class ExportEverythingTest {
         )
         assertEquals(0, second.failed)
         // Twelve files, no second copies: nothing named "file0 (2).bin".
-        val names = exported.walkTopDown().filter { it.isFile }.map { it.name }.toList()
+        val names = exported.listFiles().orEmpty().filter { it.isFile && it.name != ExportManager.INDEX }.map { it.name }.toList()
         assertEquals("one copy of each", 12, names.size)
         assertTrue("a duplicate was made: $names", names.none { it.contains("(2)") })
     }
@@ -171,7 +170,7 @@ class ExportEverythingTest {
         val result = awaitExport()
 
         assertEquals(many, result.exported)
-        assertEquals(many, exported.walkTopDown().count { it.isFile })
+        assertEquals(many, exported.listFiles().orEmpty().count { it.isFile && it.name != ExportManager.INDEX })
     }
 
     /**
@@ -212,10 +211,9 @@ class ExportEverythingTest {
         repeat(1_120) { i -> seal("m$i.bin", ByteArray(8 * 1024) { (i + it).toByte() }, millis(2026, 1 + i % 12, 4)) }
         val large = exportInto(File(drive, "large").apply { mkdirs() })
 
-        val many = File(File(drive, "large"), ExportManager.FOLDER).walkTopDown().count { it.isFile }
+        val many = File(File(drive, "large"), ExportManager.FOLDER).listFiles().orEmpty().count { it.isFile && it.name != ExportManager.INDEX }
         assertEquals("every file was exported", 1_200, many)
-        // Twelve month folders, so no single directory holds the lot.
-        assertEquals(12, File(File(drive, "large"), ExportManager.FOLDER).listFiles()!!.count { it.isDirectory })
+
 
         val grewBy = (large - small) / (1024 * 1024)
         assertTrue(
@@ -243,7 +241,7 @@ class ExportEverythingTest {
 
         assertEquals("both should have been copied", 2, result.exported)
         assertEquals("neither was already there", 0, result.skipped)
-        val copies = File(exported, "2026-06").listFiles()!!.sortedBy { it.name }
+        val copies = exported.listFiles()!!.filter { it.name != ExportManager.INDEX }.sortedBy { it.name }
         assertEquals("two files, under two names", 2, copies.size)
         val contents = copies.map { it.readBytes().toList() }
         assertTrue("the first file is missing", contents.contains(first.toList()))
@@ -258,7 +256,7 @@ class ExportEverythingTest {
 
         assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
         assertEquals(1, awaitExport().exported)
-        val copy = File(File(exported, "2026-04"), "holiday.bin")
+        val copy = File(exported, "holiday.bin")
         val stamp = copy.lastModified()
 
         entry.exportManager().reset()
@@ -267,7 +265,7 @@ class ExportEverythingTest {
 
         assertEquals("it should have been left alone", 1, second.skipped)
         assertEquals(0, second.exported)
-        assertEquals("only the one copy", 1, File(exported, "2026-04").listFiles()!!.size)
+        assertEquals("only the one copy", 1, exported.listFiles()!!.count { it.name != ExportManager.INDEX })
         assertEquals("the copy was rewritten", stamp, copy.lastModified())
     }
 
@@ -287,7 +285,7 @@ class ExportEverythingTest {
         assertTrue("it should have stopped", result.cancelled)
         assertTrue("the vault is locked", entry.session().openVault == null)
         // Whatever was finished is whole; nothing is left half-written.
-        val copies = exported.walkTopDown().filter { it.isFile }.toList()
+        val copies = exported.listFiles().orEmpty().filter { it.isFile && it.name != ExportManager.INDEX }.toList()
         assertTrue("got ${copies.size} copies", copies.size <= 6)
         copies.forEach { file ->
             assertEquals("${file.name} is a part file", 4 * 1024 * 1024L, file.length())
@@ -312,7 +310,7 @@ class ExportEverythingTest {
         assertEquals("nothing should have been copied", 0, result.exported)
         assertTrue("it should say what is wrong: $result", result.error != null)
         assertTrue("it should say how much more is needed", result.shortBy > 0)
-        assertEquals("nothing was written", 0, exported.walkTopDown().count { it.isFile })
+        assertEquals("nothing was written", 0, exported.listFiles().orEmpty().count { it.isFile && it.name != ExportManager.INDEX })
     }
 
     /** With room to spare, the check lets it through. */
@@ -328,6 +326,59 @@ class ExportEverythingTest {
 
         assertEquals(3, result.exported)
         assertEquals(0, result.shortBy)
+    }
+
+    /**
+     * The dates, albums and favourites must survive the trip out. A folder picked through the
+     * system picker usually will not let an app set a file's date, so everything the copies
+     * cannot carry themselves is written down beside them.
+     */
+    @Test
+    fun whatTheCopiesCannotCarryIsWrittenDownBesideThem() {
+        val vault = entry.session().openVault!!
+        val album = runBlocking {
+            val id = "album-holiday"
+            vault.database.albums().insert(com.shahaabapps.obscura.vault.Album(id, "Holiday", 0xFF5EF0C2, 1_700_000_000_000))
+            id
+        }
+        val photo = seal("beach.jpg", Random(5).nextBytes(20_000), millis(2025, 7, 14))
+        seal("notes.txt", Random(6).nextBytes(400), millis(2024, 11, 2))
+        runBlocking {
+            vault.database.files().setAlbum(photo.id, album)
+            vault.database.files().setFavorite(photo.id, true)
+        }
+
+        assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
+        assertEquals(2, awaitExport().exported)
+
+        val index = File(exported, ExportManager.INDEX)
+        assertTrue("no index was written", index.isFile)
+        val lines = index.readLines()
+        assertTrue("the index has no heading", lines.first().startsWith("exported name,original name,taken"))
+
+        val beach = lines.first { it.contains("beach.jpg") }
+        assertTrue("the date is missing: $beach", beach.contains("2025-07-14"))
+        assertTrue("the album is missing: $beach", beach.contains("Holiday"))
+        assertTrue("the favourite is missing: $beach", beach.endsWith("yes"))
+
+        val notes = lines.first { it.contains("notes.txt") }
+        assertTrue("the date is missing: $notes", notes.contains("2024-11-02"))
+        assertTrue("it should not be a favourite: $notes", notes.endsWith("no"))
+    }
+
+    /** Where the destination allows it, the copy keeps the date it had in the vault. */
+    @Test
+    fun theCopyKeepsItsDateWhereTheFolderAllowsIt() {
+        val taken = millis(2023, 2, 11)
+        seal("old.bin", Random(7).nextBytes(5_000), taken)
+
+        assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
+        assertEquals(1, awaitExport().exported)
+
+        // A plain folder can be told; one reached through the picker usually cannot, which is
+        // why the index above exists.
+        val copy = File(exported, "old.bin")
+        assertEquals("the copy did not keep its date", taken, copy.lastModified())
     }
 
     /** A folder that cannot be written reports failures rather than crashing. */
