@@ -194,7 +194,13 @@ class ImportManagerTest {
             // Waits until the device really is asleep: a keypress sent to an already-dark screen
             // produces no broadcast, and then nothing would have asked for a lock at all.
             TestScreen.sleep()
-            Thread.sleep(1_000)
+            // The broadcast that follows the screen going off arrives when it arrives, and a
+            // loaded device can take a moment over it. Wait for the lock to fall due rather
+            // than peeking once and calling it a failure.
+            val deferredBy = System.currentTimeMillis() + 15_000
+            while (!entry.autoLock().isLockDeferred && System.currentTimeMillis() < deferredBy) {
+                Thread.sleep(50)
+            }
             val now = manager.progress.value
             assertTrue(
                 "vault must stay unlocked while importing: started=$started, " +
