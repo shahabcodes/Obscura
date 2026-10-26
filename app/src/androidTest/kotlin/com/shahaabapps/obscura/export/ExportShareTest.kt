@@ -70,7 +70,18 @@ class ExportShareTest {
             if (p.finished && !p.running) return p
             Thread.sleep(50)
         }
-        throw AssertionError("Export did not finish: ${entry.exportManager().progress.value}")
+        // A run that never copies a byte is not a slow run. If this ever happens again, say
+        // what the threads were doing, so the next person does not have to guess the way the
+        // last few rounds of this were guessed at.
+        val busy = Thread.getAllStackTraces()
+            .filterKeys { it.name.contains("DefaultDispatcher") || it.name.contains("Export") }
+            .entries
+            .joinToString(System.lineSeparator()) { (thread, stack) ->
+                "${thread.name} ${thread.state}: " + stack.take(4).joinToString(" <- ")
+            }
+        throw AssertionError(
+            "Export did not finish: ${entry.exportManager().progress.value}; threads: $busy",
+        )
     }
 
     @Test
