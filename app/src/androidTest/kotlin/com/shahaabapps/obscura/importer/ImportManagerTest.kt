@@ -180,6 +180,15 @@ class ImportManagerTest {
         // lock at all — which has nothing to do with what this test is checking.
         val screen = ActivityScenario.launch(MainActivity::class.java)
         screen.use {
+            // Coming back to the app after being away longer than the auto-lock delay is itself
+            // a reason to lock, and as far as the app is concerned this suite has been away for
+            // every test that ran before this one. So the vault may have just been shut; open it
+            // again before starting the import that is meant to hold it open.
+            if (entry.session().openVault == null) {
+                runBlocking {
+                    entry.session().unlockWithPassphrase("lantern orbit velvet canyon mosaic".toCharArray())
+                }
+            }
             val started = manager.start(listOf(slow), ImportOptions(), startService = false)
             assertTrue("the import never started; the vault was already closed", started)
             // Waits until the device really is asleep: a keypress sent to an already-dark screen

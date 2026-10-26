@@ -56,6 +56,17 @@ class ExportInBackgroundTest {
         // request for permission never happens. Grant it here: what is being checked is that
         // the service holds itself up and says so, not how the permission is asked for.
         TestScreen.shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
+        // The grant is not always in force the instant the command returns, and without it
+        // nothing would be posted and this test would blame the service for it.
+        val granted = System.currentTimeMillis() + 10_000
+        while (androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            System.currentTimeMillis() < granted
+        ) {
+            Thread.sleep(50)
+        }
         wipe()
         drive = File(context.cacheDir, "background-export").apply { deleteRecursively(); mkdirs() }
         runBlocking { entry.session().create("lantern orbit velvet canyon mosaic".toCharArray()) }
