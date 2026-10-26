@@ -294,7 +294,7 @@ class ExportAndWipeInterruptionTest {
         assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
         awaitExportFinished()
 
-        val copies = drive.walkTopDown().filter { it.isFile }.toList()
+        val copies = drive.walkTopDown().filter { it.isFile && it.name != com.shahaabapps.obscura.export.ExportManager.INDEX }.toList()
         // 24 photos from setUp plus the six big ones.
         assertEquals("expected one copy of each, got ${copies.size}", 30, copies.size)
         originals.forEach { (name, bytes) ->
@@ -326,8 +326,8 @@ class ExportAndWipeInterruptionTest {
         val result = entry.exportManager().progress.value
         assertEquals("rotation cost it files: $result", 0, result.failed)
         assertTrue("it should not have been cancelled: $result", !result.cancelled)
-        assertEquals("every file should be out", 30, drive.walkTopDown().count { it.isFile })
-        val copies = drive.walkTopDown().filter { it.isFile }.toList()
+        assertEquals("every file should be out", 30, drive.walkTopDown().count { it.isFile && it.name != com.shahaabapps.obscura.export.ExportManager.INDEX })
+        val copies = drive.walkTopDown().filter { it.isFile && it.name != com.shahaabapps.obscura.export.ExportManager.INDEX }.toList()
         originals.forEach { (name, bytes) ->
             assertTrue("$name did not come out byte for byte", copies.any { it.readBytes().contentEquals(bytes) })
         }

@@ -75,6 +75,10 @@ class PolishFlowTest {
     fun setUp() {
         entry.panicLock().acknowledge()
         wipe()
+        // Where the user was is remembered for as long as the app runs, which is the point of
+        // it; in a suite that means a place left by an earlier test. This one is about unlocking
+        // into a fresh vault, where there is nowhere to go back to.
+        com.shahaabapps.obscura.ui.navigation.LastPlace.forget()
         runBlocking {
             entry.session().create("lantern orbit velvet canyon mosaic".toCharArray())
             entry.session().setPin("246810".toCharArray())

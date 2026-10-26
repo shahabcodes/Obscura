@@ -37,8 +37,15 @@ class ThumbnailStore(
         cache.get(file.id)?.let { return it }
         return withContext(Dispatchers.IO) {
             if (closed) return@withContext null
-            readStored(file) ?: generating.withLock {
-                cache.get(file.id) ?: generate(file)?.also { save(file, it) }
+            // The vault can lock between that check and the work below, and then there is no key
+            // to read or write a thumbnail with. There is nothing to show once it has locked, and
+            // the failure must not travel up into whichever screen asked for the picture.
+            try {
+                readStored(file) ?: generating.withLock {
+                    cache.get(file.id) ?: generate(file)?.also { save(file, it) }
+                }
+            } catch (e: IllegalStateException) {
+                null
             }
         }?.also { if (!closed) cache.put(file.id, it) }
     }
