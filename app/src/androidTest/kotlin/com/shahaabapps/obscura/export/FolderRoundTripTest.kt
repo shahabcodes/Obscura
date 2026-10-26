@@ -39,11 +39,17 @@ class FolderRoundTripTest {
 
     private lateinit var folder: File
 
-    private fun wipe() = instrumentation.runOnMainSync {
-        entry.session().lock()
-        entry.store().destroy()
-        KeystoreBinding().delete()
-        entry.session().reload()
+    private fun wipe() {
+        instrumentation.runOnMainSync { entry.session().lock() }
+        // Closing the index leaves work queued on the main thread. It has to run before the
+        // files it points at are deleted, or Room reopens a vault that is no longer there and
+        // brings the whole process down with it.
+        Thread.sleep(150)
+        instrumentation.runOnMainSync {
+            entry.store().destroy()
+            KeystoreBinding().delete()
+            entry.session().reload()
+        }
     }
 
     @Before

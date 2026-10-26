@@ -410,8 +410,28 @@ class VaultSession @Inject constructor(
      * Destroys both vaults and every key that could open them. The files on disk are useless
      * without the master keys, which existed only in the deleted headers and Keystore entries.
      */
+    /**
+     * Drops the remembered export folders and the standing permission to write to them. A
+     * decrypted export is the one thing a wipe cannot destroy; it should at least not be left
+     * named, with write access still granted.
+     */
+    private fun forgetExportDestinations() {
+        val prefs = context.getSharedPreferences("obscura.export", Context.MODE_PRIVATE)
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        listOf("destination", "decoy.destination").forEach { key ->
+            prefs.getString(key, null)?.let(android.net.Uri::parse)?.let { uri ->
+                runCatching { context.contentResolver.releasePersistableUriPermission(uri, flags) }
+            }
+        }
+        prefs.edit().clear().apply()
+    }
+
     private fun wipeEverything() {
         lock()
+        // The decrypted export is the one thing a wipe cannot reach. At least stop naming the
+        // folder it is in, and let go of the standing permission to write there.
+        runCatching { forgetExportDestinations() }
         store.destroy()
         decoyStore.destroy()
         (pinBinding as? KeystoreBinding)?.delete()

@@ -28,12 +28,18 @@ class AutoLockTest {
         instrumentation.uiAutomation.executeShellCommand(command).close()
     }
 
-    private fun wipe() = instrumentation.runOnMainSync {
-        entry.session().lock()
-        entry.store().destroy()
-        KeystoreBinding().delete()
-        context.getSharedPreferences("obscura.lockout", Context.MODE_PRIVATE).edit().clear().commit()
-        entry.session().reload()
+    private fun wipe() {
+        instrumentation.runOnMainSync { entry.session().lock() }
+        // Closing the index leaves work queued on the main thread. It has to run before the
+        // files it points at are deleted, or Room reopens a vault that is no longer there and
+        // brings the whole process down with it.
+        Thread.sleep(150)
+        instrumentation.runOnMainSync {
+            entry.store().destroy()
+            KeystoreBinding().delete()
+            context.getSharedPreferences("obscura.lockout", Context.MODE_PRIVATE).edit().clear().commit()
+            entry.session().reload()
+        }
     }
 
     private fun waitForLock(timeoutMs: Long = 5_000): Boolean {
@@ -54,16 +60,19 @@ class AutoLockTest {
 
     @Before
     fun wake() {
-        shell("input keyevent KEYCODE_WAKEUP")
-        shell("wm dismiss-keyguard")
+        TestScreen.wake()
     }
 
     /**
-     * These tests turn the screen off on purpose. Left that way, nothing after them can bring an
-     * activity up at all, so the device is handed back awake.
+     * These tests turn the screen off on purpose and shorten the auto-lock delay, both of which
+     * are shared state. Left as they are, nothing after them can bring an activity up, and any
+     * test that takes more than half a second has its vault locked out from under it.
      */
     @After
-    fun wakeAgain() = wake()
+    fun putTheDeviceBack() {
+        entry.autoLock().delayMs = AutoLock.DEFAULT_DELAY_MS
+        wake()
+    }
 
     @After
     fun tearDown() {
@@ -75,7 +84,7 @@ class AutoLockTest {
     @Test
     fun screenOffLocksImmediately() {
         unlockedVaultInForeground().use {
-            shell("input keyevent KEYCODE_SLEEP")
+            TestScreen.sleep()
             assertTrue("Vault should lock when the screen turns off", waitForLock())
         }
     }
@@ -131,7 +140,7 @@ class AutoLockTest {
         foregroundThenUnlock().use {
             autoLock.hold()
             try {
-                shell("input keyevent KEYCODE_SLEEP")
+                TestScreen.sleep()
                 Thread.sleep(1_000)
                 assertTrue("held open while the work runs", entry.session().state.value is VaultState.Unlocked)
                 wake()

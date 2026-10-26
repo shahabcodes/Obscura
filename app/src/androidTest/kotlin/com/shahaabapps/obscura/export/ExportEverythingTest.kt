@@ -37,11 +37,17 @@ class ExportEverythingTest {
     private val passphrase = "lantern orbit velvet canyon mosaic"
     private lateinit var drive: File
 
-    private fun wipe() = instrumentation.runOnMainSync {
-        entry.session().lock()
-        entry.store().destroy()
-        KeystoreBinding().delete()
-        entry.session().reload()
+    private fun wipe() {
+        instrumentation.runOnMainSync { entry.session().lock() }
+        // Closing the index leaves work queued on the main thread. It has to run before the
+        // files it points at are deleted, or Room reopens a vault that is no longer there and
+        // brings the whole process down with it.
+        Thread.sleep(150)
+        instrumentation.runOnMainSync {
+            entry.store().destroy()
+            KeystoreBinding().delete()
+            entry.session().reload()
+        }
     }
 
     @Before
@@ -159,40 +165,99 @@ class ExportEverythingTest {
 
     /**
      * What decides whether a 200 GB vault can be exported at all: memory must not grow with the
-     * number of files. The rows are walked a page at a time and each file is streamed, so a
-     * vault of any size should cost about the same as a small one.
+     * number of files. The rows are walked a page at a time and each file streamed, so exporting
+     * many should cost little more than exporting a few.
+     *
+     * Both halves are measured in this same process, because the figure that matters is the
+     * difference between them. An absolute number would mostly reflect whatever else the suite
+     * had left on the heap.
      */
     @Test
     fun memoryDoesNotGrowWithTheNumberOfFiles() {
-        val many = 1_200
-        repeat(many) { i -> seal("m$i.bin", ByteArray(8 * 1024) { (i + it).toByte() }, millis(2026, 1 + i % 12, 3)) }
-
         val runtime = Runtime.getRuntime()
-        fun used(): Long {
-            Runtime.getRuntime().gc()
-            Thread.sleep(40)
+        fun settledUse(): Long {
+            repeat(3) {
+                runtime.gc()
+                Thread.sleep(80)
+            }
             return runtime.totalMemory() - runtime.freeMemory()
         }
-        val before = used()
+
+        fun exportInto(folder: File): Long {
+            val before = settledUse()
+            assertTrue(entry.exportManager().exportEverything(FileBackupDir(folder), startService = false))
+            awaitExport()
+            return settledUse() - before
+        }
+
+        // A small vault first, to see what one export costs at all.
+        repeat(80) { i -> seal("s$i.bin", ByteArray(8 * 1024) { (i + it).toByte() }, millis(2026, 1 + i % 12, 3)) }
+        val small = exportInto(File(drive, "small").apply { mkdirs() })
+        val afterSmall = runBlocking { entry.session().openVault!!.database.files().all().size }
+        assertEquals(80, afterSmall)
+
+        // Then fifteen times as many files, which should not cost fifteen times the memory.
+        entry.exportManager().reset()
+        repeat(1_120) { i -> seal("m$i.bin", ByteArray(8 * 1024) { (i + it).toByte() }, millis(2026, 1 + i % 12, 4)) }
+        val large = exportInto(File(drive, "large").apply { mkdirs() })
+
+        val many = File(drive, "large").walkTopDown().count { it.isFile }
+        assertEquals("every file was exported", 1_200, many)
+        // Twelve month folders, so no single directory holds the lot.
+        assertEquals(12, File(drive, "large").listFiles()!!.count { it.isDirectory })
+
+        val grewBy = (large - small) / (1024 * 1024)
+        assertTrue(
+            "fifteen times the files cost ${grewBy}MB more (small ${small / (1024 * 1024)}MB, " +
+                "large ${large / (1024 * 1024)}MB)",
+            grewBy < 32,
+        )
+    }
+
+    /**
+     * Two different files can easily share a name and a size — the same photo from two cameras,
+     * or a file and a re-saved copy of it. Both must come out. Treating the second as "already
+     * there" because the first was just written would lose it silently, which is the worst way
+     * for an export to fail: the user is told it worked.
+     */
+    @Test
+    fun twoDifferentFilesWithTheSameNameAndSizeBothComeOut() {
+        val first = Random(11).nextBytes(64_000)
+        val second = Random(22).nextBytes(64_000) // same length, different content
+        seal("IMG_0001.jpg", first, millis(2026, 6, 4))
+        seal("IMG_0001.jpg", second, millis(2026, 6, 9))
 
         assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
-        val until = System.currentTimeMillis() + 180_000
-        while (System.currentTimeMillis() < until) {
-            val progress = entry.exportManager().progress.value
-            if (progress.finished && !progress.running) break
-            Thread.sleep(20)
-        }
         val result = awaitExport()
-        val after = used()
 
-        assertEquals(many, result.exported)
-        assertEquals(many, drive.walkTopDown().count { it.isFile })
-        // Twelve month folders, so no single directory holds the lot.
-        assertEquals(12, drive.listFiles()!!.count { it.isDirectory })
-        // What matters is what is still held once the run is over: a peak only says when the
-        // collector happened to run, which depends on whatever else the device was doing.
-        val grew = (after - before) / (1024 * 1024)
-        assertTrue("held on to ${grew}MB after exporting $many files", grew < 24)
+        assertEquals("both should have been copied", 2, result.exported)
+        assertEquals("neither was already there", 0, result.skipped)
+        val copies = File(drive, "2026-06").listFiles()!!.sortedBy { it.name }
+        assertEquals("two files, under two names", 2, copies.size)
+        val contents = copies.map { it.readBytes().toList() }
+        assertTrue("the first file is missing", contents.contains(first.toList()))
+        assertTrue("the second file is missing", contents.contains(second.toList()))
+    }
+
+    /** A file already in the folder from an earlier run is still skipped, which is the point. */
+    @Test
+    fun aWholeCopyFromAnEarlierRunIsStillLeftAlone() {
+        val bytes = Random(33).nextBytes(40_000)
+        seal("holiday.bin", bytes, millis(2026, 4, 2))
+
+        assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
+        assertEquals(1, awaitExport().exported)
+        val copy = File(File(drive, "2026-04"), "holiday.bin")
+        val stamp = copy.lastModified()
+
+        entry.exportManager().reset()
+        assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
+        val second = awaitExport()
+
+        assertEquals("it should have been left alone", 1, second.skipped)
+        assertEquals(0, second.exported)
+        assertEquals("only the one copy", 1, File(drive, "2026-04").listFiles()!!.size)
+        assertEquals("the copy was rewritten", stamp, copy.lastModified())
     }
 
     /** Locking the vault stops it at once and leaves no half-written copy behind. */

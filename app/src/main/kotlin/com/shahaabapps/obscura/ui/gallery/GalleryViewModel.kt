@@ -17,6 +17,7 @@ import com.shahaabapps.obscura.vault.BULK_CHUNK
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
+import com.shahaabapps.obscura.vault.whileOpen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -82,7 +83,11 @@ class GalleryViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val allFiles = session.state.flatMapLatest { state ->
-        if (state is VaultState.Unlocked) state.vault.database.files().observeAll() else flowOf(emptyList())
+        if (state is VaultState.Unlocked) {
+            state.vault.database.files().observeAll().whileOpen(emptyList())
+        } else {
+            flowOf(emptyList())
+        }
     }
 
     val state: StateFlow<GalleryUiState> = combine(allFiles, settingsStore.settings) { files, settings ->

@@ -11,6 +11,7 @@ import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
+import com.shahaabapps.obscura.vault.whileOpen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -89,7 +90,9 @@ class LibraryViewModel @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val library: StateFlow<Library> = session.state
-        .flatMapLatest { if (it is VaultState.Unlocked) it.vault.database.files().observeAll() else flowOf(emptyList()) }
+        .flatMapLatest {
+            if (it is VaultState.Unlocked) it.vault.database.files().observeAll().whileOpen(emptyList()) else flowOf(emptyList())
+        }
         .onEach { all ->
             byId.clear()
             all.forEach { byId[it.id] = it }

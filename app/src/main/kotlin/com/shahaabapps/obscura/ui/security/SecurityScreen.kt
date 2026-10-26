@@ -243,7 +243,9 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             AboutRow("Index", "SQLCipher, key derived from the vault")
             Spacer(Modifier.height(10.dp))
             GhostButton("How Obscura works — a tour", onClick = onGuide)
-            GhostButton("Export everything to a folder", onClick = onExportAll)
+            // Not in the decoy: offering it there would show that another vault had set up an
+            // export, which is the opposite of what the decoy is for.
+            if (!state.isDecoy) GhostButton("Export everything to a folder", onClick = onExportAll)
             GhostButton("Open-source licences", onClick = onLicences)
         }
     }

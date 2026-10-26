@@ -73,11 +73,21 @@ class ExportAllViewModel @Inject constructor(
 
     /** Remembers the folder first, so a run the system stops can be carried on later. */
     fun startInto(tree: Uri) {
-        exports.reset()
-        exports.rememberDestination(tree)
-        _state.value = _state.value.copy(canContinue = true)
-        exports.exportEverything(tree)
+        try {
+            exports.reset()
+            exports.rememberDestination(tree)
+            _state.value = _state.value.copy(canContinue = true)
+            exports.exportEverything(tree)
+        } finally {
+            // Whatever happens, the hold taken for the picker has to go back, or the vault
+            // could never lock itself again.
+            endPicking()
+        }
+    }
+
+    override fun onCleared() {
         endPicking()
+        super.onCleared()
     }
 
     fun continueExport() {

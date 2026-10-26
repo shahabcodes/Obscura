@@ -62,7 +62,9 @@ class SetupAndUnlockFlowTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync { wipeVault() }
     }
 
-    private fun waitForText(text: String, timeoutMs: Long = 20_000) =
+    // Creating a vault derives a key with Argon2, which is meant to be slow; on a busy emulator
+    // at the end of a long run it can take most of a minute on its own.
+    private fun waitForText(text: String, timeoutMs: Long = 90_000) =
         compose.waitUntilAtLeastOneExists(hasText(text, substring = true), timeoutMs)
 
     private fun enterPin(digits: String) = digits.forEach { compose.onNodeWithText(it.toString()).performClick() }

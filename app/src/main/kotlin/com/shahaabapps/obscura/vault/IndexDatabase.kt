@@ -14,6 +14,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import java.io.File
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 enum class FileKind { PHOTO, GIF, VIDEO, AUDIO, DOCUMENT, OTHER }
@@ -219,3 +220,16 @@ val GIFS_GET_THEIR_OWN_KIND = object : androidx.room.migration.Migration(3, 4) {
 
 /** SQLite caps the number of bound parameters; bulk updates go in chunks of this size. */
 const val BULK_CHUNK = 500
+
+/**
+ * Keeps a screen's reading of the index from bringing the app down when its vault goes away.
+ *
+ * These flows are watching an encrypted database that can be closed, or destroyed outright, at
+ * any moment: the vault locks, the user deletes it, ten wrong attempts wipe it. A query already
+ * on its way then fails on a closed connection — or on a file that is no longer the database it
+ * was — and that lands on the collector rather than anywhere it could be handled.
+ *
+ * There is nothing to show once the vault is gone, and the screen is on its way to the lock
+ * screen anyway, so the flow ends quietly with [fallback] instead.
+ */
+fun <T> Flow<T>.whileOpen(fallback: T): Flow<T> = catch { emit(fallback) }

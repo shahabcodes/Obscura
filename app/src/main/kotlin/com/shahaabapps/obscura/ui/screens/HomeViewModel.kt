@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
+import com.shahaabapps.obscura.vault.whileOpen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,7 +42,11 @@ class HomeViewModel @Inject constructor(session: VaultSession) : ViewModel() {
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<HomeUiState> = session.state
         .flatMapLatest { vault ->
-            if (vault is VaultState.Unlocked) vault.vault.database.files().observeTotals() else flowOf(emptyList())
+            if (vault is VaultState.Unlocked) {
+                vault.vault.database.files().observeTotals().whileOpen(emptyList())
+            } else {
+                flowOf(emptyList())
+            }
         }
         .map { totals ->
             HomeUiState(

@@ -29,9 +29,16 @@ class LocalFilesProvider : DocumentsProvider() {
         val root = requireNotNull(root) { "No folder has been set for the test provider" }
         if (documentId == ROOT_ID) return root
         val file = File(root, documentId.removePrefix("$ROOT_ID/"))
-        // A document id is a path relative to the root, and must stay inside it.
-        if (!file.canonicalPath.startsWith(root.canonicalPath)) throw FileNotFoundException(documentId)
+        // A document id is a path relative to the root and must stay inside it. The separator
+        // matters: without it a sibling folder whose name merely starts the same way passes.
+        if (!inside(root, file)) throw FileNotFoundException(documentId)
         return file
+    }
+
+    /** True when [file] really sits under [root], rather than merely sharing its first letters. */
+    private fun inside(root: File, file: File): Boolean {
+        val top = root.canonicalPath.trimEnd(File.separatorChar) + File.separatorChar
+        return file.canonicalPath == root.canonicalPath || file.canonicalPath.startsWith(top)
     }
 
     private fun idOf(file: File): String {
@@ -113,6 +120,7 @@ class LocalFilesProvider : DocumentsProvider() {
     override fun createDocument(parentDocumentId: String, mimeType: String, displayName: String): String {
         val parent = fileOf(parentDocumentId)
         val file = File(parent, displayName)
+        if (!inside(requireNotNull(root), file)) throw FileNotFoundException(displayName)
         if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
             if (!file.mkdirs() && !file.isDirectory) throw FileNotFoundException("Could not make $displayName")
         } else {

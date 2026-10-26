@@ -116,11 +116,19 @@ class ExportManager @Inject constructor(
             try {
                 val files = vault.database.files()
                 _progress.update { it.copy(total = files.count(), bytesTotal = files.totalBytes()) }
+                // Names this run has written, across every month, so the skip check above can
+                // tell "was already here" from "I put that there a moment ago".
+                val writtenNow = mutableSetOf<String>()
 
                 // A folder per month, each listed once and remembered, so the destination is not
                 // re-read for every single file.
                 val folders = mutableMapOf<String, BackupDir>()
-                val contents = mutableMapOf<String, MutableMap<String, Long>>()
+                // What was already in each month folder before this run started, by name and
+                // size. Only this decides whether a file is "already there".
+                val before = mutableMapOf<String, Map<String, Long>>()
+                // The names this run has claimed in each month folder, so two files that want
+                // the same name both get written rather than one overwriting or hiding the other.
+                val claimed = mutableMapOf<String, MutableSet<String>>()
 
                 var afterId = ""
                 while (true) {
@@ -136,15 +144,18 @@ class ExportManager @Inject constructor(
 
                         val month = monthOf(file.takenAt)
                         val folder = folders.getOrPut(month) { destination.directory(month) }
-                        val taken = contents.getOrPut(month) {
-                            runCatching { folder.list().associate { it.name.lowercase() to it.size }.toMutableMap() }
-                                .getOrDefault(mutableMapOf())
+                        val already = before.getOrPut(month) {
+                            runCatching { folder.list().associate { it.name.lowercase() to it.size } }
+                                .getOrDefault(emptyMap())
                         }
+                        val used = claimed.getOrPut(month) { already.keys.toMutableSet() }
 
-                        // Already there, whole: leave it be. This is what makes a second run
-                        // carry on rather than start again.
+                        // Already there from an earlier run, and the whole file: leave it be.
+                        // This is what lets a second run carry on instead of starting again.
+                        // Only what was there before counts — a copy this run just wrote must
+                        // never stand in for a different file of the same name and size.
                         val clean = uniqueName(file.name, emptySet())
-                        if (taken[clean.lowercase()] == file.sizeBytes) {
+                        if (already[clean.lowercase()] == file.sizeBytes && clean.lowercase() !in writtenNow) {
                             _progress.update {
                                 it.copy(
                                     done = it.done + 1,
@@ -155,8 +166,9 @@ class ExportManager @Inject constructor(
                             continue
                         }
 
-                        val name = uniqueName(file.name, taken.keys)
-                        taken[name.lowercase()] = file.sizeBytes
+                        val name = uniqueName(file.name, used)
+                        used += name.lowercase()
+                        writtenNow += name.lowercase()
                         val start = _progress.value.bytesDone
                         try {
                             vault.files.open(file).use { input ->
@@ -176,13 +188,14 @@ class ExportManager @Inject constructor(
                             // A half-written copy is worse than none: it would be skipped as
                             // finished by the next run.
                             runCatching { folder.delete(name) }
-                            taken.remove(name.lowercase())
+                            used -= name.lowercase()
+                            writtenNow -= name.lowercase()
                             _progress.update {
                                 it.copy(
                                     done = it.done + 1,
                                     failed = it.failed + 1,
                                     bytesDone = start + file.sizeBytes,
-                                    error = "${file.name}: ${e.message}",
+                                    error = "A file could not be copied: ${e.message}",
                                 )
                             }
                         }
@@ -206,20 +219,49 @@ class ExportManager @Inject constructor(
      */
     fun rememberDestination(tree: Uri) {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val previous = prefs.getString(destinationKey, null)?.let(Uri::parse)
         runCatching { context.contentResolver.takePersistableUriPermission(tree, flags) }
-        prefs.edit().putString("destination", tree.toString()).apply()
+        // Hold on to one folder at a time: these grants are capped, and an old one is standing
+        // write access to a folder holding a decrypted copy of the vault.
+        if (previous != null && previous != tree) {
+            runCatching { context.contentResolver.releasePersistableUriPermission(previous, flags) }
+        }
+        prefs.edit().putString(destinationKey, tree.toString()).apply()
     }
 
     /** The remembered folder, if access to it still holds. */
     fun destination(): Uri? {
-        val uri = prefs.getString("destination", null)?.let(Uri::parse) ?: return null
+        val uri = prefs.getString(destinationKey, null)?.let(Uri::parse) ?: return null
         val granted = context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
         return uri.takeIf { granted }
     }
 
     fun forgetDestination() {
-        prefs.edit().remove("destination").apply()
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        prefs.getString(destinationKey, null)?.let(Uri::parse)?.let {
+            runCatching { context.contentResolver.releasePersistableUriPermission(it, flags) }
+        }
+        prefs.edit().remove(destinationKey).apply()
     }
+
+    /** Forgets both vaults' destinations, for a wipe that is meant to leave no trace. */
+    fun forgetEveryDestination() {
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        listOf("destination", "decoy.destination").forEach { key ->
+            prefs.getString(key, null)?.let(Uri::parse)?.let {
+                runCatching { context.contentResolver.releasePersistableUriPermission(it, flags) }
+            }
+        }
+        prefs.edit().clear().apply()
+    }
+
+    /**
+     * The decoy vault keeps its own destination, as backups do. Otherwise opening the decoy
+     * would show that some other session had set up an export, and the whole point of it is that
+     * there is nothing to see.
+     */
+    private val destinationKey: String
+        get() = if (session.openVault?.isDecoy == true) "decoy.destination" else "destination"
 
     /** Carries on into the folder already chosen. */
     fun continueEverything(startService: Boolean = true): Boolean {
@@ -298,6 +340,8 @@ class ExportManager @Inject constructor(
                 _progress.update { it.copy(running = false, finished = true) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _progress.update { it.copy(running = false, finished = true, cancelled = true) }
+            } catch (e: Exception) {
+                _progress.update { it.copy(running = false, finished = true, error = "The export stopped: ${e.message}") }
             } finally {
                 autoLock.release()
             }

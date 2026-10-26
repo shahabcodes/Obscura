@@ -7,6 +7,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.shahaabapps.obscura.crypto.KdfParams
+import com.shahaabapps.obscura.TestScreen
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.crypto.KeystoreGate
 import java.io.File
@@ -122,7 +123,7 @@ class ThumbnailStoreTest {
         fun shell(cmd: String): ByteArray =
             android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(cmd)).use { it.readBytes() }
         // The recorder produces nothing while the screen is off, which happens late in long runs.
-        shell("input keyevent KEYCODE_WAKEUP")
+        TestScreen.wake()
         shell("screenrecord --time-limit 2 --size 320x640 /data/local/tmp/obscura-test.mp4")
         return shell("cat /data/local/tmp/obscura-test.mp4").also { shell("rm /data/local/tmp/obscura-test.mp4") }
     }

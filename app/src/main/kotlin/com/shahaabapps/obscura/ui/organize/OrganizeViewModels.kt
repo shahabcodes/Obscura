@@ -11,6 +11,7 @@ import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
 import com.shahaabapps.obscura.vault.VaultState
 import com.shahaabapps.obscura.vault.likePattern
+import com.shahaabapps.obscura.vault.whileOpen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,7 +50,7 @@ class SearchViewModel @Inject constructor(private val session: VaultSession) : V
             if (vault == null || q.isBlank()) flowOf(SearchResults(q, k))
             else vault.database.files().search(likePattern(q)).map { files ->
                 SearchResults(q, k, files.filter { k.kinds == null || it.kind in k.kinds }, searched = true)
-            }
+            }.whileOpen(SearchResults(q, k))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchResults())
 
@@ -62,12 +63,16 @@ class SearchViewModel @Inject constructor(private val session: VaultSession) : V
 class AlbumsViewModel @Inject constructor(private val session: VaultSession) : ViewModel() {
 
     val albums: StateFlow<List<AlbumSummary>?> = session.state
-        .flatMapLatest { s -> (s as? VaultState.Unlocked)?.vault?.database?.albums()?.observeSummaries() ?: flowOf(emptyList()) }
+        .flatMapLatest { s ->
+            (s as? VaultState.Unlocked)?.vault?.database?.albums()?.observeSummaries()?.whileOpen(emptyList())
+                ?: flowOf(emptyList())
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun album(id: String) = session.openVault?.database?.albums()?.observe(id) ?: flowOf(null)
 
-    fun filesIn(id: String) = session.openVault?.database?.files()?.observeInAlbum(id) ?: flowOf(emptyList())
+    fun filesIn(id: String) =
+        session.openVault?.database?.files()?.observeInAlbum(id)?.whileOpen(emptyList()) ?: flowOf(emptyList())
 
     suspend fun file(id: String): VaultFile? = session.openVault?.database?.files()?.get(id)
 

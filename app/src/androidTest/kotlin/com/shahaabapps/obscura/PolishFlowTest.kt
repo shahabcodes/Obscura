@@ -43,12 +43,18 @@ class PolishFlowTest {
     private val entry get() = EntryPointAccessors.fromApplication(context, VaultEntryPoint::class.java)
     private var scenario: ActivityScenario<MainActivity>? = null
 
-    private fun wipe() = instrumentation.runOnMainSync {
-        entry.session().lock()
-        entry.store().destroy()
-        KeystoreBinding().delete()
-        context.getSharedPreferences("obscura.lockout", Context.MODE_PRIVATE).edit().clear().commit()
-        entry.session().reload()
+    private fun wipe() {
+        instrumentation.runOnMainSync { entry.session().lock() }
+        // Closing the index leaves work queued on the main thread. It has to run before the
+        // files it points at are deleted, or Room reopens a vault that is no longer there and
+        // brings the whole process down with it.
+        Thread.sleep(150)
+        instrumentation.runOnMainSync {
+            entry.store().destroy()
+            KeystoreBinding().delete()
+            context.getSharedPreferences("obscura.lockout", Context.MODE_PRIVATE).edit().clear().commit()
+            entry.session().reload()
+        }
     }
 
     private fun waitForText(text: String, timeoutMs: Long = 20_000) =
