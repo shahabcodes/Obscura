@@ -107,6 +107,10 @@ class ImportManagerTest {
 
     @Before
     fun setUp() {
+        // The screen must be on before a vault is made here. A class that ran earlier can leave
+        // the device asleep, and bringing a screen up while it is asleep makes auto-lock shut
+        // the vault at once -- so the import under test would never even start.
+        TestScreen.wake()
         wipe()
         manager.reset()
         runBlocking { entry.session().create("lantern orbit velvet canyon mosaic".toCharArray()) }
@@ -177,6 +181,7 @@ class ImportManagerTest {
         val screen = ActivityScenario.launch(MainActivity::class.java)
         screen.use {
             val started = manager.start(listOf(slow), ImportOptions(), startService = false)
+            assertTrue("the import never started; the vault was already closed", started)
             // Waits until the device really is asleep: a keypress sent to an already-dark screen
             // produces no broadcast, and then nothing would have asked for a lock at all.
             TestScreen.sleep()
