@@ -76,6 +76,7 @@ import com.shahaabapps.obscura.ui.components.DecryptingIndicator
 import com.shahaabapps.obscura.ui.components.ImmersiveMode
 import com.shahaabapps.obscura.ui.components.Motion
 import com.shahaabapps.obscura.ui.components.MotionArt
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
@@ -219,6 +220,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
             onDismissRequest = { pickingAlbum = false },
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             com.shahaabapps.obscura.ui.organize.AlbumPicker(listOf(current.id), current.albumId, onDone = { pickingAlbum = false })
         }
     }
@@ -231,6 +233,7 @@ fun ShredDialog(file: VaultFile, onDismiss: () -> Unit, onConfirm: () -> Unit) {
         containerColor = Prism.Surface,
         title = { Text("Shred this file?", style = PrismType.heading, color = Prism.Paper) },
         text = {
+            SensitiveWindow()
             Text(
                 "\"${file.name}\" will be removed from the vault for good. Its key is destroyed, so the encrypted data can never be recovered. There is no trash.",
                 style = PrismType.body,

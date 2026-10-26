@@ -83,6 +83,7 @@ import com.shahaabapps.obscura.ui.components.DecryptingIndicator
 import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.theme.Prism
@@ -310,6 +311,7 @@ fun GalleryScreen(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             val files = viewModel.selectedFiles()
             com.shahaabapps.obscura.ui.organize.AlbumPicker(
                 fileIds = files.map { it.id },
@@ -328,6 +330,7 @@ fun GalleryScreen(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             SortSheet(settings, viewModel::update, onDone = { sheetOpen = false }, visible = state.flat.size)
         }
     }
@@ -359,6 +362,7 @@ private fun JumpToMonthSheet(months: List<MonthMark>, onPick: (MonthMark) -> Uni
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = Prism.Surface,
     ) {
+        SensitiveWindow()
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -594,7 +598,10 @@ internal fun BulkConfirm(action: BulkAction, count: Int, onConfirm: () -> Unit, 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Prism.Surface,
-        title = { Text(title, style = PrismType.heading, color = Prism.Paper) },
+        title = {
+            SensitiveWindow()
+            Text(title, style = PrismType.heading, color = Prism.Paper)
+        },
         text = { Text(text, style = PrismType.body, color = Prism.Muted) },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onConfirm) {

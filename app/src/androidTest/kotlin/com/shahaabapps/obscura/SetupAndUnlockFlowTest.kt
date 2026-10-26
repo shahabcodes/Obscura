@@ -82,7 +82,9 @@ class SetupAndUnlockFlowTest {
         compose.onNodeWithText("Create vault").performScrollTo().performClick()
 
         // Recovery key (Argon2id at full strength runs first)
-        waitForText("Your recovery key.", 60_000)
+        // Making a vault derives a key with Argon2, which is meant to be slow and is slower
+        // still on a busy emulator at the end of a long run.
+        waitForText("Your recovery key.", 120_000)
         compose.onNodeWithText("I've written this key down or saved the PDF").performScrollTo().performClick()
         compose.onNodeWithText("Continue").performScrollTo().performClick()
 

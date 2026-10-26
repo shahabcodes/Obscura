@@ -54,6 +54,7 @@ import com.shahaabapps.obscura.ui.components.GhostButton
 import com.shahaabapps.obscura.ui.components.Motion
 import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.SuccessOnMint
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -170,6 +171,7 @@ fun ImportScreen(viewModel: ImportViewModel = hiltViewModel()) {
             containerColor = Prism.Surface,
             title = { Text("Remove originals?", style = PrismType.heading, color = Prism.Paper) },
             text = {
+                SensitiveWindow()
                 Text(
                     "This deletes the %,d files you just sealed from their original location, so they no longer appear in your gallery or file manager. The sealed copies stay in the vault.".format(viewModel.deletableOriginals),
                     style = PrismType.body,

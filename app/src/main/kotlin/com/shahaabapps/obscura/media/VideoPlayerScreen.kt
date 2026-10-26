@@ -74,6 +74,7 @@ import androidx.media3.common.Player
 import com.shahaabapps.obscura.ui.components.ImmersiveMode
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.gallery.ShredDialog
 import com.shahaabapps.obscura.ui.gallery.formatDuration
 import com.shahaabapps.obscura.ui.gallery.rememberThumbnail
@@ -91,10 +92,17 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     val factory = remember { viewModel.dataSourceFactory() } ?: return
     val player = rememberVaultPlayer(factory)
     var started by remember { mutableStateOf(false) }
-    LaunchedEffect(videos.isNotEmpty()) {
+    // Asked for a video that is no longer here — shredded while the vault was locked, say.
+    // Playing whatever happens to be first instead would be answering a different question.
+    val wanted = videos.indexOfFirst { it.id == startId }
+    LaunchedEffect(videos.isNotEmpty(), wanted) {
+        if (videos.isNotEmpty() && wanted < 0) {
+            onBack()
+            return@LaunchedEffect
+        }
         if (!started && videos.isNotEmpty()) {
             started = true
-            player.setMediaItems(videos.map(::mediaItem), videos.indexOfFirst { it.id == startId }.coerceAtLeast(0), 0)
+            player.setMediaItems(videos.map(::mediaItem), wanted, 0)
             player.prepare()
             player.play()
         }
@@ -239,6 +247,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             ),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             val source = videos.firstOrNull { it.id == gifFromId } ?: current
             val from = if (gifFromId != null) gifFromMs else playback.positionMs
             MakeGifSheet(

@@ -159,8 +159,19 @@ class ExportManager @Inject constructor(
 
                 val albums = runCatching { vault.database.albums().all().associate { it.id to it.name } }
                     .getOrDefault(emptyMap())
-                index = folder.write(INDEX, "text/csv").bufferedWriter()
-                index.write("exported name,original name,taken,kind,size in bytes,album,favourite\n")
+                // The list beside the copies is worth having, but it is not the copies. If
+                // it cannot be written the files still go out, and that is said at the end
+                // rather than reported as the whole export having failed.
+                var indexFailed = false
+                fun note(line: String) {
+                    val writer = index
+                    if (writer == null || indexFailed) return
+                    runCatching { writer.write(line) }.onFailure { indexFailed = true }
+                }
+                runCatching {
+                    index = folder.write(INDEX, "text/csv").bufferedWriter()
+                }.onFailure { indexFailed = true }
+                note("exported name,original name,taken,kind,size in bytes,album,favourite\n")
 
                 var afterId = ""
                 while (true) {
@@ -181,7 +192,7 @@ class ExportManager @Inject constructor(
                         // wrong size is this export's own half-written file from a run that was
                         // killed outright, and is written over rather than left behind.
                         if (here[name.lowercase()] == file.sizeBytes) {
-                            index.write(indexRow(file, name, albums))
+                            note(indexRow(file, name, albums))
                             _progress.update {
                                 it.copy(
                                     done = it.done + 1,
@@ -209,7 +220,7 @@ class ExportManager @Inject constructor(
                             // allow it. The date inside a photo or video is carried across either
                             // way, and the index has it for everything.
                             runCatching { folder.setModified(name, file.takenAt) }
-                            index.write(indexRow(file, name, albums))
+                            note(indexRow(file, name, albums))
                             _progress.update {
                                 it.copy(done = it.done + 1, exported = it.exported + 1, bytesDone = start + file.sizeBytes)
                             }
@@ -249,7 +260,19 @@ class ExportManager @Inject constructor(
                     }
                 }
                 finishedCleanly = true
-                _progress.update { it.copy(running = false, finished = true) }
+                runCatching { index?.close() }.onFailure { indexFailed = true }
+                index = null
+                _progress.update {
+                    it.copy(
+                        running = false,
+                        finished = true,
+                        error = if (indexFailed) {
+                            "Every file was copied, but the list beside them could not be written."
+                        } else {
+                            it.error
+                        },
+                    )
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _progress.update { it.copy(running = false, finished = true, cancelled = true) }
             } catch (e: Exception) {

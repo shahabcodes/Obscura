@@ -55,6 +55,7 @@ import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.PinDots
 import com.shahaabapps.obscura.ui.components.PinPad
 import com.shahaabapps.obscura.ui.components.SecretField
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.components.showBiometricPrompt
 import com.shahaabapps.obscura.ui.setup.PassphraseStrength
@@ -259,6 +260,7 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             DeleteVaultSheet(viewModel) {
                 deleting = false
                 viewModel.resetDelete()
@@ -272,6 +274,7 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             ChangePassphraseSheet(viewModel) { changingPassphrase = false }
         }
     }
@@ -281,6 +284,7 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             DecoySheet(viewModel, pinAvailable = state.pinOn) { settingUpDecoy = false }
         }
     }
@@ -290,6 +294,7 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             containerColor = Prism.Surface,
             title = { Text("Turn on wipe after 10 attempts?", style = PrismType.heading, color = Prism.Paper) },
             text = {
+                SensitiveWindow()
                 Text(
                     "After 10 wrong passphrases or PINs in a row, every file, key and setting is destroyed for good. Nobody, including you, can get it back. Only turn this on if you're sure you won't forget your passphrase, and keep an offline backup.",
                     style = PrismType.body,
@@ -309,7 +314,10 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
         AlertDialog(
             onDismissRequest = { confirmRemoveDecoy = false },
             containerColor = Prism.Surface,
-            title = { Text("Delete the decoy vault?", style = PrismType.heading, color = Prism.Paper) },
+            title = {
+                SensitiveWindow()
+                Text("Delete the decoy vault?", style = PrismType.heading, color = Prism.Paper)
+            },
             text = { Text("The decoy vault and everything in it are deleted. Your real vault is not touched.", style = PrismType.body, color = Prism.Muted) },
             confirmButton = {
                 TextButton(onClick = {
@@ -326,6 +334,7 @@ fun SecurityScreen(onBackup: () -> Unit = {}, onLicences: () -> Unit = {}, onRec
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             PinSheet(onDone = { pin -> viewModel.setPin(pin) { settingPin = false } })
         }
     }

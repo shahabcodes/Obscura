@@ -45,6 +45,7 @@ import androidx.lifecycle.viewModelScope
 import com.shahaabapps.obscura.recovery.RecoveryKeyPdf
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.SecretField
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.setup.PassphraseStrength
 import com.shahaabapps.obscura.ui.setup.SealingIndicator
@@ -238,6 +239,7 @@ fun SaveRecoveryPdf(recoveryKey: String, viewModel: RecoveryPdfViewModel = hiltV
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Prism.Surface,
         ) {
+            SensitiveWindow()
             Column(
                 Modifier.imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),

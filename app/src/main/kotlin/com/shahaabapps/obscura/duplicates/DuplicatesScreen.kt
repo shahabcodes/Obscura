@@ -66,6 +66,7 @@ import com.shahaabapps.obscura.ui.components.Motion
 import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.gallery.MediaTile
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -104,7 +105,10 @@ fun DuplicatesScreen(onBack: () -> Unit, viewModel: DuplicatesViewModel = hiltVi
         AlertDialog(
             onDismissRequest = { confirm = false },
             containerColor = Prism.Surface,
-            title = { Text("Shred ${results.markedFiles.size} copies?", style = PrismType.heading, color = Prism.Paper) },
+            title = {
+                SensitiveWindow()
+                Text("Shred ${results.markedFiles.size} copies?", style = PrismType.heading, color = Prism.Paper)
+            },
             text = { Text("Frees ${formatBytes(results.markedBytes)}. Their keys are destroyed, so they can't be recovered. The copy marked BEST in each set is kept unless you marked it too.", style = PrismType.body, color = Prism.Muted) },
             confirmButton = {
                 TextButton(onClick = {

@@ -57,6 +57,7 @@ import com.shahaabapps.obscura.ui.components.Motion
 import com.shahaabapps.obscura.ui.components.MotionArt
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.SuccessOnMint
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -235,6 +236,7 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
             containerColor = Prism.Surface,
             title = { Text("Replace the backup there?", style = PrismType.heading, color = Prism.Paper) },
             text = {
+                SensitiveWindow()
                 Text(
                     "This folder already holds an Obscura backup of a different vault. Backing up here replaces it, and the old backup can't be restored afterwards.",
                     style = PrismType.body,

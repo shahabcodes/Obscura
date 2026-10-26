@@ -61,6 +61,7 @@ import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
 import com.shahaabapps.obscura.ui.components.SecretField
+import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.gallery.GalleryLogic
 import com.shahaabapps.obscura.ui.gallery.MediaTile
@@ -224,7 +225,10 @@ fun AlbumScreen(id: String, onBack: () -> Unit, onOpenFile: (VaultFile) -> Unit,
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             containerColor = Prism.Surface,
-            title = { Text("Delete this album?", style = PrismType.heading, color = Prism.Paper) },
+            title = {
+                SensitiveWindow()
+                Text("Delete this album?", style = PrismType.heading, color = Prism.Paper)
+            },
             text = { Text("The album goes away; its ${files.size} files stay sealed in the vault.", style = PrismType.body, color = Prism.Muted) },
             confirmButton = {
                 TextButton(onClick = {
