@@ -87,8 +87,16 @@ fun ExportAllScreen(onBack: () -> Unit = {}, viewModel: ExportAllViewModel = hil
                             color = Prism.Muted,
                         )
                         Text(
-                            "Copies are written out of the vault as ordinary files, in a folder for each month. " +
-                                "They are no longer encrypted: anyone who has that folder, drive or phone can open them.",
+                            "Copies are written out of the vault as ordinary files, into a folder called " +
+                                "\"Obscura export\". They are no longer encrypted: anyone who has that folder, " +
+                                "drive or phone can open them.",
+                            style = PrismType.body,
+                            color = Prism.Orange,
+                        )
+                        Text(
+                            "A list called \"Obscura index.csv\" is written beside them, because a copy cannot " +
+                                "carry everything on its own. It names every file, with the date it was taken, " +
+                                "its album and whether it was a favourite — in plain text, like the copies.",
                             style = PrismType.body,
                             color = Prism.Orange,
                         )

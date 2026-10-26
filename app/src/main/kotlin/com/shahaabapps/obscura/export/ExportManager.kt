@@ -116,20 +116,24 @@ class ExportManager @Inject constructor(
         _progress.value = ExportProgress(running = true)
         autoLock.hold()
         job = scope.launch {
+            var index: java.io.Writer? = null
+            var finishedCleanly = false
+            var root: BackupDir? = null
             try {
                 val files = vault.database.files()
                 _progress.update { it.copy(total = files.count(), bytesTotal = files.totalBytes()) }
 
-                // Everything goes inside a folder Obscura makes, so the picked folder is left as
-                // the user had it and anything within this one can be taken as this export's own
-                // work when carrying on later.
-                val root = destination.directory(FOLDER)
+                // Everything goes inside a folder Obscura makes, so the folder the user picked
+                // is left as they had it and anything within this one can be taken as this
+                // export's own work when carrying on later.
+                val folder = destination.directory(FOLDER)
+                root = folder
 
                 // Whether there is room, before anything is copied. Only what is missing counts:
                 // a run being carried on may need far less than the whole vault.
                 val free = destination.availableBytes()
                 if (free != null) {
-                    val needed = _progress.value.bytesTotal - alreadyThere(root)
+                    val needed = _progress.value.bytesTotal - alreadyThere(folder)
                     if (needed > free) {
                         _progress.update {
                             it.copy(
@@ -143,14 +147,20 @@ class ExportManager @Inject constructor(
                     }
                 }
 
-                // Everything goes in the one folder. It is listed once, here, rather than
-                // asked about for every file.
-                val here = runCatching { root.list().associate { it.name.lowercase() to it.size }.toMutableMap() }
-                    .getOrDefault(mutableMapOf())
-                // The names this run has given out, in the order the files are walked. That order
-                // is the same every time, so a file lands on the same name on every run, which is
-                // what lets a later run tell whether it is already there.
-                val given = mutableSetOf<String>()
+                // The folder as this run found it. A failure to read it stops the run rather
+                // than passing for an empty folder, which would copy everything a second time.
+                val here = folder.list().associate { it.name.lowercase() to it.size }.toMutableMap()
+
+                // Which names more than one file in the vault wants. A file's name must depend
+                // only on the file itself: working it out from the files walked before it would
+                // mean that shredding one file changes another's name, and the copy left under
+                // the old name could then be mistaken for that other file's finished work.
+                val shared = sharedNames(files)
+
+                val albums = runCatching { vault.database.albums().all().associate { it.id to it.name } }
+                    .getOrDefault(emptyMap())
+                index = folder.write(INDEX, "text/csv").bufferedWriter()
+                index.write("exported name,original name,taken,kind,size in bytes,album,favourite\n")
 
                 var afterId = ""
                 while (true) {
@@ -164,16 +174,14 @@ class ExportManager @Inject constructor(
                         coroutineContext.ensureActive()
                         if (session.openVault !== vault) throw kotlinx.coroutines.CancellationException("The vault locked")
 
-                        // The name this file gets is decided by the files walked before it, not
-                        // by what is at the destination, so it is the same name on every run.
-                        val name = uniqueName(file.name, given)
-                        given += name.lowercase()
+                        val name = exportName(file, shared)
+                        val start = _progress.value.bytesDone
 
-                        // Already written, whole, by an earlier run: leave it be. This is what
-                        // lets a run that was interrupted carry on rather than start again. A
-                        // copy of the wrong size is this export's own half-written file from a
-                        // run that was killed outright, and is written over rather than left.
+                        // Already written, whole, by an earlier run: leave it be. A copy of the
+                        // wrong size is this export's own half-written file from a run that was
+                        // killed outright, and is written over rather than left behind.
                         if (here[name.lowercase()] == file.sizeBytes) {
+                            index.write(indexRow(file, name, albums))
                             _progress.update {
                                 it.copy(
                                     done = it.done + 1,
@@ -186,13 +194,12 @@ class ExportManager @Inject constructor(
 
                         val replacing = here.containsKey(name.lowercase())
                         here[name.lowercase()] = file.sizeBytes
-                        val start = _progress.value.bytesDone
                         try {
                             vault.files.open(file).use { input ->
                                 // Only a rewrite needs the destination looked up; a new file is
                                 // created straight out, which matters when there are thousands.
-                                val output = if (replacing) root.write(name, file.mimeType) else root.writeNew(name, file.mimeType)
-                                output.use {
+                                val out = if (replacing) folder.write(name, file.mimeType) else folder.writeNew(name, file.mimeType)
+                                out.use {
                                     copy(input, it, stillOpen = { session.openVault === vault }) { n ->
                                         _progress.update { it.copy(bytesDone = start + n) }
                                     }
@@ -200,18 +207,19 @@ class ExportManager @Inject constructor(
                             }
                             // Best effort: most folders picked through the system picker will not
                             // allow it. The date inside a photo or video is carried across either
-                            // way, and the index written at the end has it for everything.
-                            runCatching { root.setModified(name, file.takenAt) }
+                            // way, and the index has it for everything.
+                            runCatching { folder.setModified(name, file.takenAt) }
+                            index.write(indexRow(file, name, albums))
                             _progress.update {
                                 it.copy(done = it.done + 1, exported = it.exported + 1, bytesDone = start + file.sizeBytes)
                             }
                         } catch (e: kotlinx.coroutines.CancellationException) {
-                            runCatching { root.delete(name) }
+                            runCatching { folder.delete(name) }
                             throw e
                         } catch (e: Exception) {
-                            // A half-written copy is worse than none: it would be skipped as
-                            // finished by the next run.
-                            runCatching { root.delete(name) }
+                            // A half-written copy is worse than none: the next run would take it
+                            // for finished work if its size happened to match.
+                            runCatching { folder.delete(name) }
                             here.remove(name.lowercase())
                             // A full drive will fail every remaining file in turn, which tells
                             // the user nothing useful. Say it once and stop.
@@ -240,17 +248,59 @@ class ExportManager @Inject constructor(
                         }
                     }
                 }
-                writeIndex(vault, root)
+                finishedCleanly = true
                 _progress.update { it.copy(running = false, finished = true) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _progress.update { it.copy(running = false, finished = true, cancelled = true) }
             } catch (e: Exception) {
                 _progress.update { it.copy(running = false, finished = true, error = "The export stopped: ${e.message}") }
             } finally {
+                runCatching { index?.close() }
+                // An index broken off partway describes an export that did not happen. Better
+                // none at all than a list that says files are there when they are not.
+                if (!finishedCleanly) root?.let { folder -> runCatching { folder.delete(INDEX) } }
                 autoLock.release()
             }
         }
         return true
+    }
+
+    /** One line of the index: what a copy cannot carry on its own. */
+    private fun indexRow(file: VaultFile, name: String, albums: Map<String, String>): String {
+        fun quote(value: String) = '"' + value.replace("\"", "\"\"") + '"'
+        val taken = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(java.time.ZoneId.systemDefault())
+            .format(java.time.Instant.ofEpochMilli(file.takenAt))
+        return listOf(
+            quote(name),
+            quote(file.name),
+            quote(taken),
+            quote(file.kind.name.lowercase()),
+            file.sizeBytes.toString(),
+            quote(file.albumId?.let { albums[it] } ?: ""),
+            if (file.favorite) "yes" else "no",
+        ).joinToString(",") + "\n"
+    }
+
+    /**
+     * The names that more than one file in the vault wants, so those files can be told apart by
+     * something of their own rather than by the order they happen to be walked in.
+     */
+    private suspend fun sharedNames(files: com.shahaabapps.obscura.vault.FileDao): Set<String> {
+        val seen = mutableSetOf<String>()
+        val twice = mutableSetOf<String>()
+        var afterId = ""
+        while (true) {
+            coroutineContext.ensureActive()
+            val page = files.pageAfter(afterId, PAGE)
+            if (page.isEmpty()) break
+            afterId = page.last().id
+            for (file in page) {
+                val clean = uniqueName(file.name, emptySet()).lowercase()
+                if (!seen.add(clean)) twice += clean
+            }
+        }
+        return twice
     }
 
     /**
@@ -307,52 +357,6 @@ class ExportManager @Inject constructor(
     fun continueEverything(startService: Boolean = true): Boolean {
         val tree = destination() ?: return false
         return exportEverything(tree, startService)
-    }
-
-    /**
-     * Writes a list of everything exported, beside the copies.
-     *
-     * A folder picked through the system picker will not usually let an app set a file's date,
-     * and nothing outside the vault knows about albums or which files were favourites. Photos
-     * and videos still carry their own dates inside them, untouched, but the rest would be lost
-     * on the way out — so it is written down here, in a form a spreadsheet or a script can read.
-     */
-    private suspend fun writeIndex(vault: OpenVault, root: BackupDir) {
-        val files = vault.database.files()
-        val albums = runCatching { vault.database.albums().all().associate { it.id to it.name } }
-            .getOrDefault(emptyMap())
-        val stamp = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            .withZone(java.time.ZoneId.systemDefault())
-
-        fun quote(value: String) = '"' + value.replace("\"", "\"\"") + '"'
-
-        root.write(INDEX, "text/csv").bufferedWriter().use { out ->
-            out.write("exported name,original name,taken,kind,size in bytes,album,favourite\n")
-            val given = mutableSetOf<String>()
-            var afterId = ""
-            while (true) {
-                coroutineContext.ensureActive()
-                val page = files.pageAfter(afterId, PAGE)
-                if (page.isEmpty()) break
-                afterId = page.last().id
-                for (file in page) {
-                    // The same walk in the same order gives the same names as the copying pass.
-                    val name = uniqueName(file.name, given)
-                    given += name.lowercase()
-                    out.write(
-                        listOf(
-                            quote(name),
-                            quote(file.name),
-                            quote(stamp.format(java.time.Instant.ofEpochMilli(file.takenAt))),
-                            quote(file.kind.name.lowercase()),
-                            file.sizeBytes.toString(),
-                            quote(file.albumId?.let { albums[it] } ?: ""),
-                            if (file.favorite) "yes" else "no",
-                        ).joinToString(",") + "\n",
-                    )
-                }
-            }
-        }
     }
 
     /** How much of the vault is already sitting at the destination from an earlier run. */
@@ -472,6 +476,20 @@ class ExportManager @Inject constructor(
 
         /** Everything the copies cannot carry themselves: dates, albums, favourites. */
         const val INDEX = "Obscura index.csv"
+
+        /**
+         * What a file is called at the destination. It depends on the file alone: its own name,
+         * and a short piece of its id when some other file in the vault wants that name too. So
+         * a file keeps its name whatever else is added or shredded, which is what lets a later
+         * run tell a finished copy from one that was never made.
+         */
+        fun exportName(file: VaultFile, shared: Set<String>): String {
+            val clean = uniqueName(file.name, emptySet())
+            if (clean.equals(INDEX, ignoreCase = true)) return uniqueName("file-" + clean, emptySet())
+            if (clean.lowercase() !in shared) return clean
+            val dot = clean.lastIndexOf('.').takeIf { it > 0 } ?: clean.length
+            return clean.substring(0, dot) + " [" + file.id.take(6) + "]" + clean.substring(dot)
+        }
 
         /** The folder a file goes in: the month it was taken, as "2026-10". */
         fun monthOf(takenAt: Long): String {

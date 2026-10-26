@@ -125,9 +125,10 @@ class ExportResumeEdgesTest {
         val names = month.listFiles()!!.filter { it.name != ExportManager.INDEX }.map { it.name }.sorted()
         assertEquals("two copies, under two names: $names", 2, names.size)
 
-        // Now stand the destination where a killed run would have left it: the first copy
-        // written, the second never reached.
-        val secondCopy = month.listFiles()!!.first { it.name.contains("(2)") }
+        // Now stand the destination where a killed run would have left it: one copy written,
+        // the other never reached. Which name is which does not matter here.
+        val secondCopy = month.listFiles()!!
+            .first { it.name != ExportManager.INDEX && it.readBytes().toList() == second.toList() }
         val lost = secondCopy.readBytes().toList()
         assertTrue(secondCopy.delete())
         assertEquals(1, month.listFiles()!!.count { it.name != ExportManager.INDEX })
@@ -147,6 +148,36 @@ class ExportResumeEdgesTest {
         val got = contentsOf("2026-06")
         assertTrue("the first file is missing", got.contains(first.toList()))
         assertTrue("the file the killed run never reached is missing", got.contains(lost))
+    }
+
+    /**
+     * The vault changes between runs. Two files share a name; the first is shredded, and a later
+     * run must still export the second rather than mistake the copy left behind for it.
+     *
+     * This is why a file's name comes from the file itself: if it depended on the files walked
+     * before it, shredding one would hand its name — and its abandoned copy — to another.
+     */
+    @Test
+    fun shreddingOneOfTwoFilesSharingANameDoesNotHideTheOther() {
+        val first = Random(91).nextBytes(48_000)
+        val second = Random(92).nextBytes(48_000) // same size, different content
+        val a = seal("IMG_0001.jpg", first, millis(2026, 6, 4))
+        seal("IMG_0001.jpg", second, millis(2026, 6, 9))
+
+        assertEquals(2, exportAndWait().exported)
+
+        // The first is shredded from the vault; its copy stays at the destination.
+        runBlocking { entry.session().openVault!!.shred(a) }
+        entry.exportManager().reset()
+        val second_run = exportAndWait()
+
+        assertEquals("the remaining file was not accounted for", 1, second_run.done)
+        val got = contentsOf("2026-06")
+        assertTrue(
+            "the file still in the vault is missing from the export " +
+                "(skipped=${second_run.skipped}, exported=${second_run.exported})",
+            got.contains(second.toList()),
+        )
     }
 
     /**
@@ -288,6 +319,9 @@ class ExportResumeEdgesTest {
         assertEquals(originals.size, runBlocking { entry.session().openVault!!.database.files().all().size })
         // Nothing half-written is sitting there under a real file name.
         val leftovers = drive.walkTopDown().filter { it.isFile }
+            // The index is not a copy. A run broken off by the drive going away cannot tidy it
+            // up either, since tidying needs the drive; the next good run writes it afresh.
+            .filter { it.name != ExportManager.INDEX }
             .filter { file -> originals.values.none { it.contentEquals(file.readBytes()) } }
             .map { "${it.name}:${it.length()}" }
             .toList()

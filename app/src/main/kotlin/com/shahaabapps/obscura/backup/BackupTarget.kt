@@ -111,7 +111,11 @@ class SafBackupDir(
     override fun list(): List<BackupNode> {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
         val nodes = mutableListOf<BackupNode>()
-        resolver.query(children, columns, null, null, null)?.use { c ->
+        // A null cursor is a provider that failed, not an empty folder. Telling them apart
+        // matters: an empty answer would make an export think nothing had been copied yet.
+        val cursor = resolver.query(children, columns, null, null, null)
+            ?: throw FileNotFoundException("Could not read $name")
+        cursor.use { c ->
             while (c.moveToNext()) {
                 nodes += Node(c.getString(0), c.getString(1) ?: "", c.getString(2) ?: "", if (c.isNull(3)) 0 else c.getLong(3))
             }
@@ -121,6 +125,15 @@ class SafBackupDir(
 
     private val parentUri: Uri get() = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
 
+    /**
+     * Documents this folder has made or looked up, by name.
+     *
+     * There is no way to ask a provider for one document by name: finding it means listing the
+     * whole folder. Writing thousands of files into one folder and then asking after each would
+     * be a listing per file, so what is already known is kept.
+     */
+    private val known = mutableMapOf<String, Uri>()
+
     override fun directory(name: String): BackupDir {
         (child(name) as? Node)?.takeIf { it.isDirectory }?.let { return it.asDirectory() }
         val created = DocumentsContract.createDocument(resolver, parentUri, Document.MIME_TYPE_DIR, name)
@@ -129,10 +142,11 @@ class SafBackupDir(
     }
 
     override fun write(name: String, mimeType: String): OutputStream {
-        val existing = child(name) as? Node
-        val uri = existing?.uri
+        val uri = known[name]
+            ?: (child(name) as? Node)?.uri
             ?: DocumentsContract.createDocument(resolver, parentUri, mimeType, name)
             ?: throw FileNotFoundException("Could not create $name")
+        known[name] = uri
         // "wt" truncates an existing file so a shorter rewrite leaves no stale tail.
         return resolver.openOutputStream(uri, "wt") ?: throw FileNotFoundException(name)
     }
@@ -140,6 +154,15 @@ class SafBackupDir(
     override fun writeNew(name: String, mimeType: String): OutputStream {
         val uri = DocumentsContract.createDocument(resolver, parentUri, mimeType, name)
             ?: throw FileNotFoundException("Could not create $name")
+        // A provider given a name already in use makes "beach (1).jpg" rather than refusing.
+        // Writing to that while recording the asked-for name would put the copy somewhere the
+        // index does not name, so the real name is checked.
+        val made = DocumentsContract.getDocumentId(uri).substringAfterLast('/')
+        if (!made.equals(name, ignoreCase = true) && made.isNotEmpty() && made.contains('.') == name.contains('.')) {
+            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+            throw FileNotFoundException("$name was already there")
+        }
+        known[name] = uri
         return resolver.openOutputStream(uri, "wt") ?: throw FileNotFoundException(name)
     }
 
@@ -150,16 +173,20 @@ class SafBackupDir(
      */
     override fun setModified(name: String, whenMillis: Long) {
         runCatching {
-            val node = child(name) as? Node ?: return
+            // Only a document already known; looking one up means listing the whole folder, and
+            // a date is not worth that for every file in a vault.
+            val uri = known[name] ?: return
             val values = android.content.ContentValues().apply {
                 put(Document.COLUMN_LAST_MODIFIED, whenMillis)
             }
-            resolver.update(node.uri, values, null, null)
+            resolver.update(uri, values, null, null)
         }
     }
 
     override fun delete(name: String) {
-        (child(name) as? Node)?.let { DocumentsContract.deleteDocument(resolver, it.uri) }
+        val uri = known[name] ?: (child(name) as? Node)?.uri ?: return
+        DocumentsContract.deleteDocument(resolver, uri)
+        known -= name
     }
 
     /**

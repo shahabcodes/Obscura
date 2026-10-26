@@ -18,14 +18,16 @@ object LastPlace {
 
     /** Remembers [route], unless it is a screen that means nothing to come back to. */
     fun remember(route: String?, isDecoy: Boolean) {
-        // The lock screens are passed through on the way in and out; they must leave what is
-        // remembered alone, or unlocking would wipe the place a moment before going back to it.
-        if (route == null || route in Routes.lockedSafe) return
+        if (route == null) return
         // Home is where unlocking goes anyway, so there is nothing to come back to.
         if (route == Routes.HOME) {
             forget()
             return
         }
+        // Only screens that show the vault's own contents. Everything else — the lock screens
+        // passed through on the way out and back, and the steps of setting a vault up — leaves
+        // what is remembered alone, rather than dropping the user somewhere odd on the way back.
+        if (!worthReturningTo(route)) return
         this.route = route
         this.fromDecoy = isDecoy
     }
@@ -44,4 +46,21 @@ object LastPlace {
         route = null
         fromDecoy = false
     }
+
+    /** The screens that show what is in the vault, and so are worth coming back to. */
+    private fun worthReturningTo(route: String) = route.substringBefore('/') in setOf(
+        Routes.GALLERY,
+        Routes.VIEWER,
+        Routes.VIDEO,
+        Routes.DOCUMENT,
+        Routes.REEL,
+        Routes.ALBUM,
+        Routes.ALBUMS,
+        Routes.VIDEOS,
+        Routes.GIFS,
+        Routes.AUDIO,
+        Routes.DOCS,
+        Routes.SEARCH,
+        Routes.DUPLICATES,
+    )
 }
