@@ -359,11 +359,11 @@ class ExportEverythingTest {
         val beach = lines.first { it.contains("beach.jpg") }
         assertTrue("the date is missing: $beach", beach.contains("2025-07-14"))
         assertTrue("the album is missing: $beach", beach.contains("Holiday"))
-        assertTrue("the favourite is missing: $beach", beach.endsWith("yes"))
+        assertTrue("the favourite is missing: $beach", beach.contains(",yes,"))
 
         val notes = lines.first { it.contains("notes.txt") }
         assertTrue("the date is missing: $notes", notes.contains("2024-11-02"))
-        assertTrue("it should not be a favourite: $notes", notes.endsWith("no"))
+        assertTrue("it should not be a favourite: $notes", notes.contains(",no,"))
     }
 
     /** Where the destination allows it, the copy keeps the date it had in the vault. */

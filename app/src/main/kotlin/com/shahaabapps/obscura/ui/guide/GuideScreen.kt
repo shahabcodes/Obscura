@@ -108,7 +108,7 @@ private val Tour = listOf(
         tint = Prism.Orange,
         steps = listOf(
             Step(Icons.Outlined.CheckCircle, "Select", "Press and drag across tiles to pick several, then export, favourite, album or shred them together."),
-            Step(Icons.Outlined.PhotoLibrary, "Export everything", "In Security. Writes a readable copy of the whole vault into a folder you choose, in a folder per month. It keeps going while you do something else, and running it again carries on where it stopped."),
+            Step(Icons.Outlined.PhotoLibrary, "Export everything", "In Security. Writes a readable copy of the whole vault into a folder you choose, with a list beside it holding each file's date, album and favourite. It keeps going while you do something else, and running it again carries on where it stopped."),
             Step(null, "Backup", "A copy that stays encrypted, for a drive or folder. Only a backup can be restored into the app again."),
         ),
     ),

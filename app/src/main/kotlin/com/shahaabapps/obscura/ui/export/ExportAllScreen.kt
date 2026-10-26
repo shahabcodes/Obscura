@@ -94,6 +94,13 @@ fun ExportAllScreen(onBack: () -> Unit = {}, viewModel: ExportAllViewModel = hil
                             color = Prism.Orange,
                         )
                         Text(
+                            "The folder is kept as a copy of the vault: run it again and anything " +
+                                "already there is left alone, while copies of files you have since " +
+                                "shredded are taken away.",
+                            style = PrismType.body,
+                            color = Prism.Muted,
+                        )
+                        Text(
                             "A list called \"Obscura index.csv\" is written beside them, because a copy cannot " +
                                 "carry everything on its own. It names every file, with the date it was taken, " +
                                 "its album and whether it was a favourite — in plain text, like the copies.",
@@ -194,6 +201,14 @@ private fun FinishedCard(
             style = PrismType.heading,
             color = Prism.Paper,
         )
+        if (progress.removed > 0) {
+            Text(
+                "%,d older copies were taken away, of files that are no longer in your vault."
+                    .format(progress.removed),
+                style = PrismType.body,
+                color = Prism.Muted,
+            )
+        }
         if (progress.failed > 0) {
             Text("%,d could not be copied".format(progress.failed), style = PrismType.body, color = Prism.Orange)
         }
