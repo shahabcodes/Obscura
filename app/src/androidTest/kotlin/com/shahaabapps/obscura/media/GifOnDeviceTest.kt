@@ -5,12 +5,14 @@ import android.graphics.ImageDecoder
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.shahaabapps.obscura.KeepVaultOpen
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -20,6 +22,11 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class GifOnDeviceTest {
+
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
 
     private fun encode(width: Int, height: Int, palette: IntArray, frames: List<ByteArray>, delayCentis: Int = 10): ByteArray {
         val out = ByteArrayOutputStream()

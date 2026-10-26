@@ -168,7 +168,9 @@ class ImportManagerTest {
 
     @Test
     fun vaultStaysOpenDuringImportThenLocks() {
-        val slow = TestSource("big.bin", "application/octet-stream", ByteArray(6 * 64 * 1024), delayPerChunkMs = 400)
+        // Long enough to still be going once the screen has really gone off, which is checked
+        // rather than assumed and so takes a moment.
+        val slow = TestSource("big.bin", "application/octet-stream", ByteArray(24 * 64 * 1024), delayPerChunkMs = 400)
         // The app has to be on screen for this one. With no activity up, Android may treat the
         // process as cached and hold the screen-off broadcast back, and then nothing asks for a
         // lock at all — which has nothing to do with what this test is checking.

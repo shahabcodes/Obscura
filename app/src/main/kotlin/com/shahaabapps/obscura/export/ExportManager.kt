@@ -41,6 +41,8 @@ data class ExportProgress(
     val skipped: Int = 0,
     /** Set when the system stopped a long export; running it again carries on where it left off. */
     val paused: Boolean = false,
+    /** Set when the destination has not got the room: what is still needed, and what is free. */
+    val shortBy: Long = 0,
     val error: String? = null,
 ) {
     val fraction: Float
@@ -116,19 +118,39 @@ class ExportManager @Inject constructor(
             try {
                 val files = vault.database.files()
                 _progress.update { it.copy(total = files.count(), bytesTotal = files.totalBytes()) }
-                // Names this run has written, across every month, so the skip check above can
-                // tell "was already here" from "I put that there a moment ago".
-                val writtenNow = mutableSetOf<String>()
+
+                // Everything goes inside a folder Obscura makes, so the picked folder is left as
+                // the user had it and anything within this one can be taken as this export's own
+                // work when carrying on later.
+                val root = destination.directory(FOLDER)
+
+                // Whether there is room, before anything is copied. Only what is missing counts:
+                // a run being carried on may need far less than the whole vault.
+                val free = destination.availableBytes()
+                if (free != null) {
+                    val needed = _progress.value.bytesTotal - alreadyThere(root)
+                    if (needed > free) {
+                        _progress.update {
+                            it.copy(
+                                running = false,
+                                finished = true,
+                                shortBy = needed - free,
+                                error = "There is not enough room in that folder.",
+                            )
+                        }
+                        return@launch
+                    }
+                }
 
                 // A folder per month, each listed once and remembered, so the destination is not
                 // re-read for every single file.
                 val folders = mutableMapOf<String, BackupDir>()
-                // What was already in each month folder before this run started, by name and
-                // size. Only this decides whether a file is "already there".
-                val before = mutableMapOf<String, Map<String, Long>>()
-                // The names this run has claimed in each month folder, so two files that want
-                // the same name both get written rather than one overwriting or hiding the other.
-                val claimed = mutableMapOf<String, MutableSet<String>>()
+                // What each month folder holds, by name and size, as this run found it.
+                val onDisk = mutableMapOf<String, MutableMap<String, Long>>()
+                // The names this run has given out in each month folder, in the order the files
+                // are walked. That order is the same every time, so a file lands on the same name
+                // on every run, which is what lets a later run tell whether it is already there.
+                val given = mutableMapOf<String, MutableSet<String>>()
 
                 var afterId = ""
                 while (true) {
@@ -143,19 +165,23 @@ class ExportManager @Inject constructor(
                         if (session.openVault !== vault) throw kotlinx.coroutines.CancellationException("The vault locked")
 
                         val month = monthOf(file.takenAt)
-                        val folder = folders.getOrPut(month) { destination.directory(month) }
-                        val already = before.getOrPut(month) {
-                            runCatching { folder.list().associate { it.name.lowercase() to it.size } }
-                                .getOrDefault(emptyMap())
+                        val folder = folders.getOrPut(month) { root.directory(month) }
+                        val here = onDisk.getOrPut(month) {
+                            runCatching { folder.list().associate { it.name.lowercase() to it.size }.toMutableMap() }
+                                .getOrDefault(mutableMapOf())
                         }
-                        val used = claimed.getOrPut(month) { already.keys.toMutableSet() }
+                        val used = given.getOrPut(month) { mutableSetOf() }
 
-                        // Already there from an earlier run, and the whole file: leave it be.
-                        // This is what lets a second run carry on instead of starting again.
-                        // Only what was there before counts — a copy this run just wrote must
-                        // never stand in for a different file of the same name and size.
-                        val clean = uniqueName(file.name, emptySet())
-                        if (already[clean.lowercase()] == file.sizeBytes && clean.lowercase() !in writtenNow) {
+                        // The name this file gets is decided by the files walked before it, not
+                        // by what is at the destination, so it is the same name on every run.
+                        val name = uniqueName(file.name, used)
+                        used += name.lowercase()
+
+                        // Already written, whole, by an earlier run: leave it be. This is what
+                        // lets a run that was interrupted carry on rather than start again. A
+                        // copy of the wrong size is this export's own half-written file from a
+                        // run that was killed outright, and is written over rather than left.
+                        if (here[name.lowercase()] == file.sizeBytes) {
                             _progress.update {
                                 it.copy(
                                     done = it.done + 1,
@@ -166,9 +192,7 @@ class ExportManager @Inject constructor(
                             continue
                         }
 
-                        val name = uniqueName(file.name, used)
-                        used += name.lowercase()
-                        writtenNow += name.lowercase()
+                        here[name.lowercase()] = file.sizeBytes
                         val start = _progress.value.bytesDone
                         try {
                             vault.files.open(file).use { input ->
@@ -188,8 +212,23 @@ class ExportManager @Inject constructor(
                             // A half-written copy is worse than none: it would be skipped as
                             // finished by the next run.
                             runCatching { folder.delete(name) }
-                            used -= name.lowercase()
-                            writtenNow -= name.lowercase()
+                            here.remove(name.lowercase())
+                            // A full drive will fail every remaining file in turn, which tells
+                            // the user nothing useful. Say it once and stop.
+                            val room = destination.availableBytes()
+                            if (room != null && room < file.sizeBytes) {
+                                _progress.update {
+                                    it.copy(
+                                        running = false,
+                                        finished = true,
+                                        done = it.done + 1,
+                                        failed = it.failed + 1,
+                                        shortBy = file.sizeBytes - room,
+                                        error = "The folder ran out of room.",
+                                    )
+                                }
+                                return@launch
+                            }
                             _progress.update {
                                 it.copy(
                                     done = it.done + 1,
@@ -268,6 +307,13 @@ class ExportManager @Inject constructor(
         val tree = destination() ?: return false
         return exportEverything(tree, startService)
     }
+
+    /** How much of the vault is already sitting at the destination from an earlier run. */
+    private fun alreadyThere(root: BackupDir): Long = runCatching {
+        root.list().filter { it.isDirectory }.sumOf { month ->
+            runCatching { month.asDirectory().list().sumOf { it.size } }.getOrDefault(0L)
+        }
+    }.getOrDefault(0L)
 
     /** Stops the run and says it can be picked up again, for the system's own time limit. */
     fun pauseForTimeLimit() {
@@ -371,6 +417,13 @@ class ExportManager @Inject constructor(
     companion object {
         /** How many rows are held at a time while walking the whole vault. */
         private const val PAGE = 500
+
+        /**
+         * Obscura makes this folder inside the one the user picked and treats what is in it as
+         * its own, so carrying on later never has to guess whether a file is a copy it made or
+         * something of the user's that happens to share a name.
+         */
+        const val FOLDER = "Obscura export"
 
         /** The folder a file goes in: the month it was taken, as "2026-10". */
         fun monthOf(takenAt: Long): String {

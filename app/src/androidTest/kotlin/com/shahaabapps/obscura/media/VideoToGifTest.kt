@@ -11,6 +11,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.shahaabapps.obscura.KeepVaultOpen
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.IncomingFile
@@ -27,10 +28,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.nio.ByteBuffer
+import org.junit.Rule
 
 /** Turning a stretch of a sealed video into a GIF, sealed back into the vault. */
 @RunWith(AndroidJUnit4::class)
 class VideoToGifTest {
+
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context: Context = instrumentation.targetContext

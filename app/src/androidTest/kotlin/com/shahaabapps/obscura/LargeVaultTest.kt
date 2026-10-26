@@ -43,6 +43,11 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LargeVaultTest {
 
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
+
     @get:Rule
     val compose = createEmptyComposeRule()
 

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shahaabapps.obscura.export.ExportProgress
+import com.shahaabapps.obscura.ui.backup.rememberNotificationGate
 import com.shahaabapps.obscura.ui.components.GhostButton
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
@@ -51,8 +52,11 @@ fun ExportAllScreen(onBack: () -> Unit = {}, viewModel: ExportAllViewModel = hil
     val state by viewModel.state.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
 
+    // An export runs for hours in the background; without a notification there is nothing to
+    // show it is going and no way to stop it.
+    val withNotifications = rememberNotificationGate()
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree: Uri? ->
-        if (tree != null) viewModel.startInto(tree) else viewModel.endPicking()
+        if (tree != null) withNotifications { viewModel.startInto(tree) } else viewModel.endPicking()
     }
 
     ScreenFrame(title = "Export everything", onBack = onBack) {
@@ -62,7 +66,7 @@ fun ExportAllScreen(onBack: () -> Unit = {}, viewModel: ExportAllViewModel = hil
                 progress.finished -> FinishedCard(
                     progress = progress,
                     canContinue = state.canContinue,
-                    onContinue = viewModel::continueExport,
+                    onContinue = { withNotifications { viewModel.continueExport() } },
                     onDone = viewModel::clear,
                 )
                 else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -75,6 +79,11 @@ fun ExportAllScreen(onBack: () -> Unit = {}, viewModel: ExportAllViewModel = hil
                                 formatBytes(state.bytes),
                             ),
                             style = PrismType.label,
+                            color = Prism.Muted,
+                        )
+                        Text(
+                            "The folder you pick needs about %s free.".format(formatBytes(state.bytes)),
+                            style = PrismType.body,
                             color = Prism.Muted,
                         )
                         Text(
@@ -106,7 +115,10 @@ fun ExportAllScreen(onBack: () -> Unit = {}, viewModel: ExportAllViewModel = hil
                         },
                     )
                     if (state.canContinue) {
-                        GhostButton("Carry on into the last folder", onClick = viewModel::continueExport)
+                        GhostButton(
+                            "Carry on into the last folder",
+                            onClick = { withNotifications { viewModel.continueExport() } },
+                        )
                     }
                 }
             }
@@ -178,6 +190,13 @@ private fun FinishedCard(
             Text("%,d could not be copied".format(progress.failed), style = PrismType.body, color = Prism.Orange)
         }
         progress.error?.let { Text(it, style = PrismType.body, color = Prism.Orange) }
+        if (progress.shortBy > 0) {
+            Text(
+                "About %s more is needed. Free some space, or choose a drive with more room — what has already been copied will be left alone.".format(formatBytes(progress.shortBy)),
+                style = PrismType.body,
+                color = Prism.Muted,
+            )
+        }
         if (progress.paused) {
             Text(
                 "Android only lets a background job run for so long. Everything copied so far is in place; " +

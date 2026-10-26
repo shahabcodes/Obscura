@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.shahaabapps.obscura.KeepVaultOpen
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.ui.gallery.GalleryFilter
 import com.shahaabapps.obscura.ui.gallery.GalleryLogic
@@ -15,12 +16,18 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /** GIFs arriving as their own kind (including ones sealed before), and deleting the whole vault. */
 @RunWith(AndroidJUnit4::class)
 class GifsAndDeleteTest {
+
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context: Context = instrumentation.targetContext

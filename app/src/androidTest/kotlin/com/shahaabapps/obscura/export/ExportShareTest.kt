@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.OpenableColumns
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.shahaabapps.obscura.KeepVaultOpen
 import com.shahaabapps.obscura.backup.FileBackupDir
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.vault.IncomingFile
@@ -23,10 +24,16 @@ import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import kotlin.random.Random
+import org.junit.Rule
 
 /** Saving decrypted copies, and one-time share links read through a real ContentResolver. */
 @RunWith(AndroidJUnit4::class)
 class ExportShareTest {
+
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context: Context = instrumentation.targetContext

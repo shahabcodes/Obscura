@@ -6,6 +6,8 @@ import android.content.Intent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.shahaabapps.obscura.KeepVaultOpen
+import com.shahaabapps.obscura.TestScreen
 import com.shahaabapps.obscura.backup.FileBackupDir
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.vault.IncomingFile
@@ -18,6 +20,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -27,6 +30,11 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ExportInBackgroundTest {
+
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context: Context = instrumentation.targetContext
@@ -48,6 +56,10 @@ class ExportInBackgroundTest {
 
     @Before
     fun setUp() {
+        // This test starts the export straight from the manager, so the export screen's own
+        // request for permission never happens. Grant it here: what is being checked is that
+        // the service holds itself up and says so, not how the permission is asked for.
+        TestScreen.shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
         wipe()
         drive = File(context.cacheDir, "background-export").apply { deleteRecursively(); mkdirs() }
         runBlocking { entry.session().create("lantern orbit velvet canyon mosaic".toCharArray()) }
@@ -123,7 +135,7 @@ class ExportInBackgroundTest {
         assertTrue("nothing told the user it was running", sawNotification)
         assertTrue("it stopped when the app was left", advancedWhileAway)
         assertEquals("every file was copied", 90, result.exported)
-        assertEquals(90, drive.walkTopDown().count { it.isFile })
+        assertEquals(90, File(drive, ExportManager.FOLDER).walkTopDown().count { it.isFile })
     }
 
     /** The vault stays open while it runs, and locks again once it is done. */

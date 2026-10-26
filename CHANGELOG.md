@@ -8,7 +8,7 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
-## [0.14.0] - 2026-10-25
+## [0.14.0] - 2026-10-26
 
 ### Added
 - **Export everything to a folder.** In Security. Writes a readable copy of the whole vault into a folder you choose — a USB drive, an SD card, anywhere the system picker will go. Built for a vault far bigger than this phone's memory: files are walked a page at a time and streamed one by one, so a vault of a few hundred gigabytes costs no more memory than a small one.
@@ -18,10 +18,14 @@ section as the GitHub release notes.
 - **A tour of the app**, also in Security: every control and every gesture, including the ones with no button to find — pinching the gallery to change how many fit across, tapping a picture to clear the screen, swiping through reel mode.
 
 ### Fixed
+- **Deleting a vault, or being wiped after ten wrong attempts, could take the app down with it.** The gallery, home and search screens watch the encrypted index for changes; when the vault was closed or destroyed underneath them, a reading already on its way failed where nothing could catch it. They now stop quietly, which is the only sensible answer once there is nothing left to read.
 - Picking a folder for an export used to let the vault lock while the system picker was in front, so you came back to a locked vault and nothing happened. The vault is now held open while you choose, as it already was for backups.
+- The export's own "already there" check could skip a file because of a copy it had just written itself: two different files sharing a name and a size in the same month meant only one came out, and it was reported as finished. What was already at the destination is now kept apart from what the run has made.
+- The remembered export folder is kept separately for the decoy vault and is not offered there at all, so opening the decoy no longer shows that another vault had set one up.
+- A wipe now forgets the export folder and gives up its write permission. A decrypted export is the one thing a wipe cannot reach; it should not be left named with access still granted.
 
 ### Tests
-- 132 unit tests and 189 on-device tests. Exporting is now tested through the Storage Access Framework — the folder a real picker hands over — rather than a plain directory standing in for it: files are taken in from a folder, the originals removed, and then written back into that same folder byte for byte. Exporting everything is tested stopped partway and run again (nothing copied twice, nothing missed), across more files than fit in one page of the index, with memory measured so it cannot creep up with the number of files, with the vault locked mid-run, and left running while the app is backgrounded.
+- 132 unit tests and 191 on-device tests. Exporting is now tested through the Storage Access Framework — the folder a real picker hands over — rather than a plain directory standing in for it: files are taken in from a folder, the originals removed, and then written back into that same folder byte for byte. Exporting everything is tested stopped partway and run again (nothing copied twice, nothing missed), across more files than fit in one page of the index, with memory measured so it cannot creep up with the number of files, with the vault locked mid-run, and left running while the app is backgrounded.
 
 ## [0.13.0] - 2026-10-25
 

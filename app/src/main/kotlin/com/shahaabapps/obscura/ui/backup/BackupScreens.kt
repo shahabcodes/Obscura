@@ -134,8 +134,14 @@ class BackupViewModel @Inject constructor(
 }
 
 /** Asks for notification permission once, so progress can show; the work runs either way. */
+/**
+ * Asks for permission to show notifications, then runs the action either way.
+ *
+ * Work that carries on in the background is held up by a notification; without one the user has
+ * no sign it is running and no way to stop it.
+ */
 @Composable
-private fun rememberNotificationGate(): ((() -> Unit) -> Unit) {
+fun rememberNotificationGate(): ((() -> Unit) -> Unit) {
     val context = LocalContext.current
     var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {

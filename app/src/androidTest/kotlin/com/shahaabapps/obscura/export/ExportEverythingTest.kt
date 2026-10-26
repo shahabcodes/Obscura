@@ -3,6 +3,8 @@ package com.shahaabapps.obscura.export
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.shahaabapps.obscura.KeepVaultOpen
+import com.shahaabapps.obscura.backup.BackupDir
 import com.shahaabapps.obscura.backup.FileBackupDir
 import com.shahaabapps.obscura.crypto.KeystoreBinding
 import com.shahaabapps.obscura.vault.IncomingFile
@@ -19,6 +21,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -30,6 +33,11 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ExportEverythingTest {
+
+    /** The vault stays open while this runs, as it does in the app during long work. */
+    @get:Rule
+    val keepOpen = KeepVaultOpen()
+
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context: Context = instrumentation.targetContext
@@ -63,6 +71,9 @@ class ExportEverythingTest {
         drive.deleteRecursively()
         wipe()
     }
+
+    /** The folder the export makes for itself inside the one that was picked. */
+    private val exported get() = File(drive, ExportManager.FOLDER)
 
     private fun millis(y: Int, m: Int, d: Int) =
         LocalDateTime.of(y, m, d, 12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -101,10 +112,10 @@ class ExportEverythingTest {
         assertEquals(4, result.exported)
         assertEquals(0, result.failed)
         assertEquals(0, result.skipped)
-        assertEquals(setOf("2024-12", "2025-03", "2026-10"), drive.listFiles()!!.map { it.name }.toSet())
+        assertEquals(setOf("2024-12", "2025-03", "2026-10"), exported.listFiles()!!.map { it.name }.toSet())
         written.forEach { (name, it) ->
             val month = "%04d-%02d".format(it.second, it.third)
-            val copy = File(File(drive, month), name)
+            val copy = File(File(exported, month), name)
             assertTrue("$name is missing from $month", copy.isFile)
             assertArrayEquals("$name came back changed", it.first, copy.readBytes())
         }
@@ -130,7 +141,7 @@ class ExportEverythingTest {
         awaitExport()
         // Whether the cancel landed before the last file or just after it does not matter here;
         // what matters is that running it again finishes the job without copying anything twice.
-        val copiedFirstTime = drive.walkTopDown().count { it.isFile }
+        val copiedFirstTime = exported.walkTopDown().count { it.isFile }
         assertTrue("nothing was copied at all", copiedFirstTime >= 1)
 
         // Again, into the same folder.
@@ -145,7 +156,7 @@ class ExportEverythingTest {
         )
         assertEquals(0, second.failed)
         // Twelve files, no second copies: nothing named "file0 (2).bin".
-        val names = drive.walkTopDown().filter { it.isFile }.map { it.name }.toList()
+        val names = exported.walkTopDown().filter { it.isFile }.map { it.name }.toList()
         assertEquals("one copy of each", 12, names.size)
         assertTrue("a duplicate was made: $names", names.none { it.contains("(2)") })
     }
@@ -160,7 +171,7 @@ class ExportEverythingTest {
         val result = awaitExport()
 
         assertEquals(many, result.exported)
-        assertEquals(many, drive.walkTopDown().count { it.isFile })
+        assertEquals(many, exported.walkTopDown().count { it.isFile })
     }
 
     /**
@@ -201,10 +212,10 @@ class ExportEverythingTest {
         repeat(1_120) { i -> seal("m$i.bin", ByteArray(8 * 1024) { (i + it).toByte() }, millis(2026, 1 + i % 12, 4)) }
         val large = exportInto(File(drive, "large").apply { mkdirs() })
 
-        val many = File(drive, "large").walkTopDown().count { it.isFile }
+        val many = File(File(drive, "large"), ExportManager.FOLDER).walkTopDown().count { it.isFile }
         assertEquals("every file was exported", 1_200, many)
         // Twelve month folders, so no single directory holds the lot.
-        assertEquals(12, File(drive, "large").listFiles()!!.count { it.isDirectory })
+        assertEquals(12, File(File(drive, "large"), ExportManager.FOLDER).listFiles()!!.count { it.isDirectory })
 
         val grewBy = (large - small) / (1024 * 1024)
         assertTrue(
@@ -232,7 +243,7 @@ class ExportEverythingTest {
 
         assertEquals("both should have been copied", 2, result.exported)
         assertEquals("neither was already there", 0, result.skipped)
-        val copies = File(drive, "2026-06").listFiles()!!.sortedBy { it.name }
+        val copies = File(exported, "2026-06").listFiles()!!.sortedBy { it.name }
         assertEquals("two files, under two names", 2, copies.size)
         val contents = copies.map { it.readBytes().toList() }
         assertTrue("the first file is missing", contents.contains(first.toList()))
@@ -247,7 +258,7 @@ class ExportEverythingTest {
 
         assertTrue(entry.exportManager().exportEverything(FileBackupDir(drive), startService = false))
         assertEquals(1, awaitExport().exported)
-        val copy = File(File(drive, "2026-04"), "holiday.bin")
+        val copy = File(File(exported, "2026-04"), "holiday.bin")
         val stamp = copy.lastModified()
 
         entry.exportManager().reset()
@@ -256,7 +267,7 @@ class ExportEverythingTest {
 
         assertEquals("it should have been left alone", 1, second.skipped)
         assertEquals(0, second.exported)
-        assertEquals("only the one copy", 1, File(drive, "2026-04").listFiles()!!.size)
+        assertEquals("only the one copy", 1, File(exported, "2026-04").listFiles()!!.size)
         assertEquals("the copy was rewritten", stamp, copy.lastModified())
     }
 
@@ -276,11 +287,47 @@ class ExportEverythingTest {
         assertTrue("it should have stopped", result.cancelled)
         assertTrue("the vault is locked", entry.session().openVault == null)
         // Whatever was finished is whole; nothing is left half-written.
-        val copies = drive.walkTopDown().filter { it.isFile }.toList()
+        val copies = exported.walkTopDown().filter { it.isFile }.toList()
         assertTrue("got ${copies.size} copies", copies.size <= 6)
         copies.forEach { file ->
             assertEquals("${file.name} is a part file", 4 * 1024 * 1024L, file.length())
         }
+    }
+
+    /**
+     * A destination without the room must say so before anything is copied, rather than failing
+     * file after file for hours. What is already there counts towards it, so carrying on into a
+     * part-finished folder is measured by what is left rather than by the whole vault.
+     */
+    @Test
+    fun aDestinationWithoutTheRoomIsRefusedUpFront() {
+        repeat(4) { i -> seal("big$i.bin", Random(i).nextBytes(512 * 1024), millis(2026, 3, 2)) }
+        val tiny = object : BackupDir by FileBackupDir(drive) {
+            override fun availableBytes(): Long = 64 * 1024 // nowhere near enough
+        }
+
+        assertTrue(entry.exportManager().exportEverything(tiny, startService = false))
+        val result = awaitExport()
+
+        assertEquals("nothing should have been copied", 0, result.exported)
+        assertTrue("it should say what is wrong: $result", result.error != null)
+        assertTrue("it should say how much more is needed", result.shortBy > 0)
+        assertEquals("nothing was written", 0, exported.walkTopDown().count { it.isFile })
+    }
+
+    /** With room to spare, the check lets it through. */
+    @Test
+    fun aDestinationWithRoomIsNotRefused() {
+        repeat(3) { i -> seal("ok$i.bin", Random(i).nextBytes(100_000), millis(2026, 3, 2)) }
+        val roomy = object : BackupDir by FileBackupDir(drive) {
+            override fun availableBytes(): Long = 500L * 1024 * 1024
+        }
+
+        assertTrue(entry.exportManager().exportEverything(roomy, startService = false))
+        val result = awaitExport()
+
+        assertEquals(3, result.exported)
+        assertEquals(0, result.shortBy)
     }
 
     /** A folder that cannot be written reports failures rather than crashing. */
