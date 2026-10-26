@@ -176,12 +176,19 @@ class ImportManagerTest {
         // lock at all — which has nothing to do with what this test is checking.
         val screen = ActivityScenario.launch(MainActivity::class.java)
         screen.use {
-            manager.start(listOf(slow), ImportOptions(), startService = false)
+            val started = manager.start(listOf(slow), ImportOptions(), startService = false)
             // Waits until the device really is asleep: a keypress sent to an already-dark screen
             // produces no broadcast, and then nothing would have asked for a lock at all.
             TestScreen.sleep()
             Thread.sleep(1_000)
-            assertTrue("vault must stay unlocked while importing", entry.session().state.value is VaultState.Unlocked)
+            val now = manager.progress.value
+            assertTrue(
+                "vault must stay unlocked while importing: started=$started, " +
+                    "importRunning=${now.running}, processed=${now.processed}/${now.total}, " +
+                    "finished=${now.finished}, screen=${TestScreen.state()}, " +
+                    "deferred=${entry.autoLock().isLockDeferred}",
+                entry.session().state.value is VaultState.Unlocked,
+            )
             val progress = manager.progress.value
             assertTrue(
                 "lock not deferred: vault=${entry.session().state.value}, " +
