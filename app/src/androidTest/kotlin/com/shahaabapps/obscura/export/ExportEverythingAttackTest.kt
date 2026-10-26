@@ -264,7 +264,15 @@ class ExportEverythingAttackTest {
             "the decoy can reach the real vault's export folder: ${entry.exportManager().destination()}",
             entry.exportManager().destination() == null,
         )
-        val seen = entry.exportManager().progress.value
+        // The figures are cleared as the next vault opens, which happens on the manager's own
+        // coroutine rather than inside unlock, so this waits for it rather than reading at the
+        // instant the unlock call returns.
+        val until = System.currentTimeMillis() + 10_000
+        var seen = entry.exportManager().progress.value
+        while (seen.finished && System.currentTimeMillis() < until) {
+            Thread.sleep(50)
+            seen = entry.exportManager().progress.value
+        }
         assertTrue(
             "the decoy session is still showing the real vault's export: $seen",
             seen == ExportProgress() || (!seen.finished && !seen.running),

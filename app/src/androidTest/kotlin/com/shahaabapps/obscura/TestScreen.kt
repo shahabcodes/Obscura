@@ -56,7 +56,9 @@ object TestScreen {
         repeat(ATTEMPTS) {
             shell("input keyevent KEYCODE_SLEEP")
             Thread.sleep(SETTLE_MS)
-            if (wakefulness() != "Awake") return
+            // Asleep, not merely "not awake": dozing is the always-on display, where the
+            // screen-off broadcast an app waits for has not necessarily gone out yet.
+            if (wakefulness() == "Asleep") return
         }
         throw AssertionError("the screen would not turn off; it is ${wakefulness()}")
     }
