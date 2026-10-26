@@ -261,6 +261,12 @@ class ExportManager @Inject constructor(
                             // A half-written copy is worse than none: the next run would take it
                             // for finished work if its size happened to match.
                             runCatching { folder.delete(name) }
+                            // The vault closing mid-read surfaces as an ordinary failure from
+                            // the cipher. It is not the file's fault and must not be counted
+                            // against it: the run was stopped.
+                            if (session.openVault !== vault) {
+                                throw kotlinx.coroutines.CancellationException("The vault locked")
+                            }
                             here.remove(name.lowercase())
                             // A full drive will fail every remaining file in turn, which tells
                             // the user nothing useful. Say it once and stop.
@@ -549,6 +555,11 @@ class ExportManager @Inject constructor(
                         throw e
                     } catch (e: Exception) {
                         target.discard()
+                        // The vault closing mid-read is the run being stopped, not the file
+                        // failing to copy.
+                        if (session.openVault !== vault) {
+                            throw kotlinx.coroutines.CancellationException("The vault locked")
+                        }
                         _progress.update { it.copy(done = it.done + 1, failed = it.failed + 1, bytesDone = start + file.sizeBytes, error = "${file.name}: ${e.message}") }
                     }
                 }

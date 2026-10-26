@@ -8,6 +8,24 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-26
+
+### Fixed
+- **Exporting could leave a file behind and still say it had finished.** Three ways, all the same mistake: a name that another file could arrive at too. A file called "Obscura index.csv" was renamed out of the way before the check for a contested name; a file whose own name already looked like a copy this makes — "beach [1a2b3c].jpg", which is what an earlier export produces — could be handed the name meant for another file; and the short piece of a file's id used to tell two apart was small enough for a few thousand files to collide within. A contested name now carries the file's whole id, which nothing else has.
+- **A file replaced since the last export could keep the old copy.** Deciding what was already copied from a name and a size cannot tell one file from another that took its place: shred a photo, bring in a different one of the same name and size, and the old bytes stayed while the list named the new file. The list now records which file each copy came from, and a copy is left alone only when it is that same file.
+- The list is kept when a run is interrupted, and written out row by row as it goes, so a run that is killed outright leaves a true account of how far it got rather than an empty file beside real copies. It is also what lets the next run carry on.
+- A copy of a file you have since shredded is taken away on the next run. Leaving a readable copy of a file you destroyed is the opposite of what shredding is for. Only copies Obscura knows it made are touched.
+- Locking the vault during an export is reported as the run being stopped, not as the file failing to copy.
+- Sheets and dialogs are windows of their own and did not inherit the rule that only genuine assistive tools may read the screen — and they are where file names appear, such as the clip a GIF is being made from. All of them now say so themselves.
+- A list that cannot be written no longer fails the whole export: the copies still go out, and the trouble is reported at the end.
+- Coming back to a file that was shredded while the vault was locked showed whichever file happened to be first. The viewer and the player now go back instead.
+- A finished export's figures are cleared as the next vault opens, rather than being there for it to see.
+- The tour no longer describes a folder for each month.
+
+### Tests
+- 138 unit tests and 223 on-device tests. Twelve of them attack the export: two files named like the list, a file named like another file's copy, a file replaced between runs, a hard kill partway, names differing only by case, 300-character and emoji names, and two and a half thousand files in one folder.
+
+
 ## [0.14.0] - 2026-10-26
 
 ### Added

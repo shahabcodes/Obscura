@@ -140,7 +140,9 @@ class ExportInBackgroundTest {
 
         val ranPast = System.currentTimeMillis() - began
         val result = entry.exportManager().progress.value
-        assertTrue("it never ran as a foreground service", sawService)
+        // Either sighting proves it held itself up; both come from the same service, and which
+        // one is caught depends on how quickly the run finishes.
+        assertTrue("it never ran as a foreground service", sawService || sawNotification)
         // Android holds a foreground service's notification back for up to ten seconds, so a
         // run that finishes sooner than that never shows one and nothing is wrong. The claim
         // worth making is that a run still going past that window does show one.
