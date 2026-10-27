@@ -45,6 +45,13 @@ class GallerySettingsStore @Inject constructor(@ApplicationContext context: Cont
             groupByMonth = prefs.getBoolean("groupByMonth", true),
             columns = prefs.getInt("columns", 3).coerceIn(ColumnRange.MIN, ColumnRange.MAX),
             filter = runCatching { GalleryFilter.valueOf(prefs.getString("filter", null) ?: "ALL") }.getOrDefault(GalleryFilter.ALL),
+            // Nothing stored means no limit, so an install from before this shows every length.
+            // A stored value of the wrong type, or outside what the sheet can produce, falls
+            // back to no limit rather than taking the gallery down with it: this is built on
+            // the way to the first screen, where there would be no way back.
+            duration = runCatching { prefs.getInt("durationSeconds", 0) }.getOrDefault(0)
+                .takeIf { it in 1..DurationLimit.MAX_SECONDS }
+                ?.let { DurationLimit(it, runCatching { prefs.getBoolean("durationLonger", false) }.getOrDefault(false)) },
         ),
     )
     val settings: StateFlow<GallerySettings> = _settings.asStateFlow()
@@ -58,6 +65,8 @@ class GallerySettingsStore @Inject constructor(@ApplicationContext context: Cont
             .putBoolean("groupByMonth", next.groupByMonth)
             .putInt("columns", next.columns)
             .putString("filter", next.filter.name)
+            .putInt("durationSeconds", next.duration?.seconds ?: 0)
+            .putBoolean("durationLonger", next.duration?.longer ?: false)
             .apply()
     }
 }

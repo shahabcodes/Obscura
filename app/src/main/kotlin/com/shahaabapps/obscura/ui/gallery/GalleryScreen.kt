@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -72,6 +73,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -83,6 +86,7 @@ import com.shahaabapps.obscura.ui.components.DecryptingIndicator
 import com.shahaabapps.obscura.ui.components.EmptyState
 import com.shahaabapps.obscura.ui.components.PillButton
 import com.shahaabapps.obscura.ui.components.RoundIconButton
+import com.shahaabapps.obscura.ui.components.SecretField
 import com.shahaabapps.obscura.ui.components.SensitiveWindow
 import com.shahaabapps.obscura.ui.components.prismBlock
 import com.shahaabapps.obscura.ui.screens.formatBytes
@@ -112,6 +116,7 @@ fun GalleryScreen(
     val scope = rememberCoroutineScope()
     val months by remember(state.entries) { derivedStateOf { GalleryLogic.months(state.entries) } }
     var jumpOpen by remember { mutableStateOf(false) }
+    var lengthOpen by remember { mutableStateOf(false) }
     val selecting by viewModel.selecting.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val export by viewModel.export.collectAsStateWithLifecycle()
@@ -123,6 +128,10 @@ fun GalleryScreen(
     }
     BackHandler(enabled = selecting) { viewModel.endSelecting() }
     val ids = remember(state.flat) { state.flat.map { it.id } }
+    // How many of the selected files are on screen. Every bulk action works on exactly these, so
+    // this is what the header and the confirmations must count: narrow the filter after selecting
+    // and a count of the raw selection would ask to shred two files and shred one.
+    val chosen = remember(state.flat, selection) { state.flat.count { it.id in selection } }
 
     // Floating month label while scrolling, standing in for sticky headers.
     val currentMonth by remember(state.entries, settings.groupByMonth) {
@@ -137,7 +146,7 @@ fun GalleryScreen(
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (selecting) {
                 SelectionHeader(
-                    count = selection.size,
+                    count = chosen,
                     allSelected = state.flat.isNotEmpty() && selection.containsAll(state.flat.map { it.id }),
                     onClose = viewModel::endSelecting,
                     onSelectAll = viewModel::selectAll,
@@ -196,6 +205,33 @@ fun GalleryScreen(
                     )
                 }
             }
+            // Length only means something for videos, so it is offered where it applies -- on a
+            // line of its own, since the filters above it scroll and this must not scroll away.
+            if (settings.filter == GalleryFilter.VIDEOS) {
+                val set = settings.duration != null
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("LENGTH", style = PrismType.label, color = Prism.Muted)
+                    Text(
+                        settings.duration?.label ?: "Any length",
+                        style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight),
+                        color = if (set) Prism.Ink else Prism.Paper.copy(alpha = 0.85f),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (set) Prism.Sun else Prism.Surface)
+                            .clickable { lengthOpen = true }
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                            .testTag("Video length"),
+                    )
+                }
+            }
+        }
+
+        if (lengthOpen) {
+            VideoLengthSheet(
+                current = settings.duration,
+                onPick = { limit -> viewModel.update { it.copy(duration = limit) } },
+                onClose = { lengthOpen = false },
+            )
         }
 
         if (jumpOpen) {
@@ -286,7 +322,7 @@ fun GalleryScreen(
     }
 
     confirm?.let { action ->
-        val count = selection.size
+        val count = chosen
         BulkConfirm(
             action = action,
             count = count,
@@ -388,6 +424,117 @@ private fun JumpToMonthSheet(months: List<MonthMark>, onPick: (MonthMark) -> Uni
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Lengths worth offering outright; anything else is typed. */
+private val LENGTH_PRESETS = listOf(10, 30, 60, 120, 300, 600)
+
+/**
+ * Keep only the videos shorter -- or longer -- than a length. Both the number and which side of
+ * it to keep are the user's: a preset, or any number of seconds they type.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun VideoLengthSheet(current: DurationLimit?, onPick: (DurationLimit?) -> Unit, onClose: () -> Unit) {
+    var longer by remember { mutableStateOf(current?.longer ?: false) }
+    var typed by remember { mutableStateOf(current?.seconds?.toString() ?: "") }
+    val wanted = typed.toIntOrNull()?.takeIf { it in 1..DurationLimit.MAX_SECONDS }
+    // The number on screen when it is usable, otherwise the one already in force: switching
+    // sides must not apply a length other than the one being read.
+    val sideOf = { side: Boolean -> DurationLimit(wanted ?: current?.seconds ?: 0, side) }
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Prism.Surface,
+    ) {
+        SensitiveWindow()
+        Column(
+            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp).padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Video length", style = PrismType.heading, color = Prism.Paper)
+            Text(
+                "Show only the videos on one side of a length. Videos whose length the vault " +
+                    "could not read are always shown.",
+                style = PrismType.body,
+                color = Prism.Muted,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(false to "Under", true to "Over").forEach { (side, label) ->
+                    val on = longer == side
+                    Text(
+                        label,
+                        style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight),
+                        color = if (on) Prism.Ink else Prism.Paper,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (on) Prism.Paper else Prism.SurfaceHigh)
+                            .selectable(selected = on, role = Role.Tab) {
+                                longer = side
+                                // A limit already in force switches sides there and then.
+                                if (current != null) onPick(sideOf(side))
+                            }
+                            .padding(horizontal = 18.dp, vertical = 10.dp)
+                            .testTag(label),
+                    )
+                }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                LENGTH_PRESETS.forEach { seconds ->
+                    val on = current?.seconds == seconds
+                    Text(
+                        DurationLimit.spell(seconds),
+                        style = PrismType.body,
+                        color = if (on) Prism.Ink else Prism.Paper,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (on) Prism.Sun else Prism.SurfaceHigh)
+                            .clickable {
+                                onPick(DurationLimit(seconds, longer))
+                                onClose()
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .testTag("Length ${DurationLimit.spell(seconds)}"),
+                    )
+                }
+            }
+            SecretField(
+                "Seconds",
+                typed,
+                { next ->
+                    // Held to a day's worth of seconds as it is typed, so the button never sits
+                    // there refusing a number with nothing to say about why.
+                    val digits = next.filter { it.isDigit() }.take(5)
+                    if ((digits.toIntOrNull() ?: 0) <= DurationLimit.MAX_SECONDS) typed = digits
+                },
+                placeholder = "50",
+                revealable = false,
+                keyboardType = KeyboardType.Number,
+                onImeAction = { wanted?.let { onPick(DurationLimit(it, longer)); onClose() } },
+            )
+            PillButton(
+                if (wanted == null) "Enter a length" else DurationLimit(wanted, longer).label,
+                onClick = { wanted?.let { onPick(DurationLimit(it, longer)); onClose() } },
+                container = if (wanted == null) Prism.SurfaceHigh else Prism.Mint,
+                content = if (wanted == null) Prism.Muted else Prism.Ink,
+            )
+            if (current != null) {
+                PillButton(
+                    "Any length",
+                    onClick = {
+                        onPick(null)
+                        onClose()
+                    },
+                    container = Prism.SurfaceHigh,
+                    content = Prism.Paper,
+                )
             }
         }
     }

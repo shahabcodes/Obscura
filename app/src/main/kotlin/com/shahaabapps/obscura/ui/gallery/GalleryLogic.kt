@@ -14,12 +14,42 @@ enum class GalleryFilter(val label: String) {
     ALL("All"), PHOTOS("Photos"), VIDEOS("Videos"), GIFS("GIFs"), SCREENSHOTS("Screens"), FAVORITES("Favourites")
 }
 
+/**
+ * A length to hold videos against: [seconds], and which side of it to keep.
+ *
+ * Both halves are the user's choice. Fifty seconds with [longer] off shows everything shorter
+ * than fifty seconds; with it on, everything longer.
+ */
+data class DurationLimit(val seconds: Int, val longer: Boolean) {
+    val label: String get() = (if (longer) "Over " else "Under ") + spell(seconds)
+
+    /** True when a video of this length belongs; a length that isn't known never hides a file. */
+    fun keeps(durationMs: Long?): Boolean {
+        val ms = durationMs ?: return true
+        return if (longer) ms > seconds * 1000L else ms < seconds * 1000L
+    }
+
+    companion object {
+        /** A day's worth of video: past this, a limit is the same as no limit. */
+        const val MAX_SECONDS = 86_400
+
+        /** Seconds as a person would say them. */
+        fun spell(seconds: Int): String = when {
+            seconds < 60 -> "${seconds}s"
+            seconds % 60 == 0 -> "${seconds / 60}m"
+            else -> "${seconds / 60}m ${seconds % 60}s"
+        }
+    }
+}
+
 data class GallerySettings(
     val sortBy: SortBy = SortBy.DATE,
     val descending: Boolean = true,
     val groupByMonth: Boolean = true,
     val columns: Int = 3,
     val filter: GalleryFilter = GalleryFilter.ALL,
+    /** Only has a say while the videos filter is on; null means any length. */
+    val duration: DurationLimit? = null,
 )
 
 sealed interface GalleryEntry {
@@ -64,6 +94,16 @@ object GalleryLogic {
         }
     }
 
+    /**
+     * What the gallery shows under [settings]: the chosen filter, then the length limit, which
+     * only applies where it means anything -- the videos filter.
+     */
+    fun media(all: List<VaultFile>, settings: GallerySettings): List<VaultFile> {
+        val shown = media(all, settings.filter)
+        val limit = settings.duration.takeIf { settings.filter == GalleryFilter.VIDEOS } ?: return shown
+        return shown.filter { limit.keeps(it.durationMs) }
+    }
+
     private fun comparator(settings: GallerySettings): Comparator<VaultFile> {
         val base: Comparator<VaultFile> = when (settings.sortBy) {
             SortBy.DATE -> compareBy { it.takenAt }
@@ -91,7 +131,7 @@ object GalleryLogic {
      * sorting by date ascending) and the chosen sort applies inside each month.
      */
     fun build(all: List<VaultFile>, settings: GallerySettings, zone: ZoneId = ZoneId.systemDefault()): List<GalleryEntry> {
-        val files = media(all, settings.filter)
+        val files = media(all, settings)
         val order = comparator(settings)
         if (!settings.groupByMonth) {
             return files.sortedWith(order).mapIndexed { i, f -> GalleryEntry.Item(f, i) }

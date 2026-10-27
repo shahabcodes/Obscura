@@ -8,6 +8,21 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-27
+
+### Added
+- **Filter videos by how long they are.** On the Videos filter there is now a length. Tap it, choose under or over, and either take a preset (10s, 30s, 1m, 2m, 5m, 10m) or type any number of seconds: fifty seconds, under, and only the clips shorter than that are shown. The choice stays until you lift it, and the pill always says what is in force. A clip whose length Obscura could not read is always shown, because a filter that hides a file you own is worse than one that shows an extra.
+
+### Fixed
+- **A selection was counted before the grid, so the app could ask about more files than it would touch.** Narrow the filter after selecting — easy to do now there is a length — and the header still said "2 selected" and the confirmation still asked "Shred 2 files?" while only the one file left on screen would go. The count now comes from what is on screen, which is what every action already worked on. Nothing was ever destroyed beyond what was showing.
+
+### Known
+- The video length is remembered across vaults, as the sort order, the filter and the column count already are. Set one in your vault and the decoy's Videos filter shows the same length.
+
+### Tests
+- Eight unit tests on the boundary and the wording, and four on-device tests that encode a real two-second clip and a real ten-second one, import them, and work the sheet the way a hand would — the preset, a typed length, the side, and the keyboard's own done key.
+- Nineteen further on-device journeys: locking and panic-locking with the sheet open and the keyboard up, a real process kill and cold start with a length in force, stored lengths corrupted every way they can be, backgrounding and rotation, a length that empties the grid, selecting and then narrowing it, and the decoy in both directions.
+
 ## [0.14.1] - 2026-10-26
 
 ### Fixed

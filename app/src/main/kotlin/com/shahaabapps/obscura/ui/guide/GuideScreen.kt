@@ -75,6 +75,7 @@ private val Tour = listOf(
             Step(Icons.Outlined.CalendarMonth, "Jump to a month", "Every month you have files from, under its year. Follows whichever filter you are on."),
             Step(Icons.AutoMirrored.Outlined.Sort, "Sort", "By date, size or type; tap again to turn the order around."),
             Step(null, "Filters", "All, Photos, Videos, GIFs, Screens, Favourites — across the top of the gallery."),
+            Step(null, "Video length", "On the Videos filter, set a length and keep the clips under or over it."),
             Step(Icons.Outlined.Search, "Search", "By name, from the home screen."),
             Step(Icons.Outlined.ContentCopy, "Duplicates", "Finds files sealed twice, and look-alike photos, so you can free the space."),
         ),
