@@ -21,6 +21,7 @@ section as the GitHub release notes.
 
 ### Tests
 - Eight unit tests on the boundary and the wording, and four on-device tests that encode a real two-second clip and a real ten-second one, import them, and work the sheet the way a hand would — the preset, a typed length, the side, and the keyboard's own done key.
+- The reel's shape test was reading a measurement that means nothing while Compose's clock is held: the video surface was measured correctly and simply had not been placed, so the test reported it at 0x0 and failed whenever the timing fell that way. It now reads the size the surface was measured at, with the clock running, from a clip sealed with the shape a real import records.
 - Nineteen further on-device journeys: locking and panic-locking with the sheet open and the keyboard up, a real process kill and cold start with a length in force, stored lengths corrupted every way they can be, backgrounding and rotation, a length that empties the grid, selecting and then narrowing it, and the decoy in both directions.
 
 ## [0.14.1] - 2026-10-26

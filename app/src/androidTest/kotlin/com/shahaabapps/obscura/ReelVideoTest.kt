@@ -129,12 +129,18 @@ class ReelVideoTest {
         }
     }
 
-    /** Seals a photo and, newest so the reel opens on it, the given video. */
-    private fun seed(video: ByteArray, name: String = "clip.mp4") = runBlocking {
+    /**
+     * Seals a photo and, newest so the reel opens on it, the given video.
+     *
+     * [width] and [height] are the shape the importer reads off a real file and records; pass
+     * them where the test cares what the picture is shaped like, and leave them out where the
+     * file is a broken one whose shape nothing could have read.
+     */
+    private fun seed(video: ByteArray, name: String = "clip.mp4", width: Int? = null, height: Int? = null) = runBlocking {
         entry.session().create("lantern orbit velvet canyon mosaic".toCharArray())
         val files = entry.session().openVault!!.files
         files.put(jpeg().inputStream(), IncomingFile("after.jpg", "image/jpeg", 1_700_000_000_000 - 60_000))
-        files.put(video.inputStream(), IncomingFile(name, "video/mp4", 1_700_000_000_000))
+        files.put(video.inputStream(), IncomingFile(name, "video/mp4", 1_700_000_000_000, width, height))
     }
 
     private fun openGallery() {
@@ -192,27 +198,25 @@ class ReelVideoTest {
      */
     @Test
     fun theVideoIsNotStretchedToFillTheScreen() {
-        seed(encodeMp4(4))
+        // Sealed with the shape a real import records, so the picture is right from the first
+        // frame instead of only once the player gets round to reporting its own size.
+        seed(encodeMp4(4), width = 320, height = 240)
         openGallery()
-        compose.mainClock.autoAdvance = false
+        // The clock runs here, unlike the timing tests: the shape is a question of layout, and a
+        // held clock leaves the surface measured but never placed -- bounds of zero that say
+        // nothing about the picture, which is what this test used to read.
         compose.onNodeWithText("Reel mode").performClick()
-        fun step() {
-            compose.mainClock.advanceTimeByFrame()
-            Thread.sleep(16)
-        }
-        val deadline = System.currentTimeMillis() + 30_000
-        while (!exists("Playing clip.mp4")) {
-            check(System.currentTimeMillis() < deadline) { "the video never started playing" }
-            step()
-        }
-        repeat(30) { step() } // let the player report its size and the layout settle
 
-        val bounds = compose.onNode(hasContentDescription("Playing clip.mp4", substring = true))
-            .fetchSemanticsNode().boundsInRoot
-        val shown = bounds.width / bounds.height
+        // What the surface was actually measured at, once it has a size at all.
+        fun measured() = compose.onAllNodes(hasContentDescription("Playing clip.mp4", substring = true))
+            .fetchSemanticsNodes().firstOrNull()?.size?.takeIf { it.width > 0 && it.height > 0 }
+        compose.waitUntil(30_000) { measured() != null }
+
+        val size = measured()!!
+        val shown = size.width.toFloat() / size.height
         val real = 320f / 240f
         assertTrue(
-            "shown at ${bounds.width.toInt()}x${bounds.height.toInt()} (%.2f) but the video is %.2f".format(shown, real),
+            "shown at ${size.width}x${size.height} (%.2f) but the video is %.2f".format(shown, real),
             kotlin.math.abs(shown - real) < 0.1f,
         )
     }
