@@ -8,6 +8,13 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+### Fixed
+- **Swiping sideways did nothing on a video.** Photos have always moved to the next one with a swipe, and the tour said videos did too, but the video player only knew taps and pinches. A swipe on the picture now moves to the next video or back to the one before, and the picture follows the finger as it goes. Past either end it stays put rather than wrapping round. Zoomed in, a drag still moves around the picture instead.
+- **"Next" in the player was not the next video on the screen you came from.** The player went through every video newest first, whatever the gallery was showing — its sort order, its filter and the new length limit all ignored, so the next video could be one the gallery was hiding. Opened from the gallery, the player now follows the gallery exactly, and "Up next" with it. Opened from a search or an album, every video is still in reach.
+
+### Tests
+- Three on-device tests swipe through real clips in a gallery sorted oldest first, so the library's own newest-first order and the gallery's disagree: next and back, a swipe past the end, and a video the length limit hides. Two of them fail if the player goes back to the library's order.
+
 ## [0.15.0] - 2026-10-27
 
 ### Added

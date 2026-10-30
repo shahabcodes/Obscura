@@ -99,6 +99,7 @@ private val Tour = listOf(
         tint = Prism.Mint,
         steps = listOf(
             Step(Icons.Filled.PlayArrow, "Play, seek, skip", "Drag the bar, or jump ten seconds either way. Speed runs from 0.5× to 2×."),
+            Step(null, "Next video", "Swipe the picture sideways for the next video in the gallery, or back to the one before. It follows the gallery's order and filters."),
             Step(Icons.Outlined.Gif, "Make a GIF", "Pause where you want it to start, then pick 2, 3 or 5 seconds. The GIF is sealed back into the vault."),
             Step(null, "Reel mode", "Plays through everything by itself, three, five or ten seconds each. Swipe up and down to move, tap to clear the screen."),
         ),

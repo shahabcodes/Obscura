@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import com.shahaabapps.obscura.ui.components.MAX_ANIMATED_BYTES
+import com.shahaabapps.obscura.ui.gallery.GalleryLogic
+import com.shahaabapps.obscura.ui.gallery.GallerySettingsStore
 import com.shahaabapps.obscura.vault.FileKind
 import com.shahaabapps.obscura.vault.VaultFile
 import com.shahaabapps.obscura.vault.VaultSession
@@ -18,9 +20,9 @@ import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,6 +38,8 @@ data class GifMaking(
 data class Library(
     val loaded: Boolean = false,
     val videos: List<VaultFile> = emptyList(),
+    /** The videos the gallery is showing, in its order: its sort, its filter, its length. */
+    val galleryVideos: List<VaultFile> = emptyList(),
     val audio: List<VaultFile> = emptyList(),
     val documents: List<VaultFile> = emptyList(),
 )
@@ -45,6 +49,7 @@ data class Library(
 class LibraryViewModel @Inject constructor(
     private val session: VaultSession,
     private val autoLock: com.shahaabapps.obscura.vault.AutoLock,
+    private val gallerySettings: GallerySettingsStore,
 ) : ViewModel() {
 
     private val _gif = kotlinx.coroutines.flow.MutableStateFlow(GifMaking())
@@ -97,10 +102,11 @@ class LibraryViewModel @Inject constructor(
             byId.clear()
             all.forEach { byId[it.id] = it }
         }
-        .map { all ->
+        .combine(gallerySettings.settings) { all, settings ->
             Library(
                 loaded = true,
                 videos = all.filter { it.kind == FileKind.VIDEO },
+                galleryVideos = GalleryLogic.flat(GalleryLogic.build(all, settings)).filter { it.kind == FileKind.VIDEO },
                 audio = all.filter { it.kind == FileKind.AUDIO },
                 documents = all.filter { it.kind == FileKind.DOCUMENT || it.kind == FileKind.OTHER },
             )

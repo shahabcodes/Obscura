@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +65,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -88,7 +90,12 @@ import com.shahaabapps.obscura.vault.VaultFile
 fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -> Unit) {
     val library by viewModel.library.collectAsStateWithLifecycle()
     if (!library.loaded) return
-    val videos = library.videos
+    // Swiping and "Up next" follow the gallery the video was opened from -- its order, its
+    // filter, its length -- so the next video is the next one on that screen. Opened from
+    // somewhere the gallery is not showing it, a search or an album, every video is in reach.
+    // Settled once: the list under a playing video must not change shape beneath it.
+    val fromGallery = remember { library.galleryVideos.any { it.id == startId } }
+    val videos = if (fromGallery) library.galleryVideos else library.videos
     val factory = remember { viewModel.dataSourceFactory() } ?: return
     val player = rememberVaultPlayer(factory)
     var started by remember { mutableStateOf(false) }
@@ -125,10 +132,19 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     // does, the dimensions recorded when the file was sealed keep the picture from being squeezed.
     val storedAspect = current.width?.let { w -> current.height?.takeIf { it > 0 }?.let { h -> w.toFloat() / h } }
     val aspect = playback.videoSize.aspectOrNull() ?: storedAspect
+    // Sideways to the next video or back to the last, as with photos. Past either end the
+    // swipe simply does nothing, rather than wrapping round to the far end of the list.
+    val swipe: (Boolean) -> Unit = { forward ->
+        val moved = if (forward) player.hasNextMediaItem() else player.hasPreviousMediaItem()
+        if (moved) {
+            if (forward) player.seekToNextMediaItem() else player.seekToPreviousMediaItem()
+            player.play()
+        }
+    }
 
     if (!chrome) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoStage(player, playback, aspect, Modifier.fillMaxSize()) { chrome = true }
+            VideoStage(player, playback, aspect, Modifier.fillMaxSize(), onSwipe = swipe) { chrome = true }
         }
         BackHandler { chrome = true }
         return
@@ -156,6 +172,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             playback = playback,
             aspect = aspect,
             modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).aspectRatio(ratio.coerceIn(0.5f, 2.4f)).clip(RoundedCornerShape(26.dp)),
+            onSwipe = swipe,
             onTap = { chrome = false },
         )
 
@@ -326,8 +343,9 @@ private fun MakeGifSheet(state: GifMaking, name: String, fromMs: Long, onCreate:
 }
 
 /**
- * The picture itself: pinch to zoom and drag to move once zoomed, tap to hide everything else.
- * The surface is marked secure, so frames never reach a screenshot or a recording.
+ * The picture itself: pinch to zoom and drag to move once zoomed, swipe sideways for the next
+ * or the last video, tap to hide everything else. The surface is marked secure, so frames never
+ * reach a screenshot or a recording.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -336,14 +354,18 @@ private fun VideoStage(
     playback: PlaybackState,
     aspect: Float?,
     modifier: Modifier,
+    onSwipe: (forward: Boolean) -> Unit,
     onTap: () -> Unit,
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    // How far a sideways swipe has carried the picture, so it follows the finger.
+    var drag by remember { mutableFloatStateOf(0f) }
 
     Box(
         modifier
             .background(Color.Black)
+            .testTag("Video stage")
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { onTap() },
@@ -370,6 +392,24 @@ private fun VideoStage(
                         }
                     } while (event.changes.any { it.pressed })
                 }
+            }
+            .pointerInput(Unit) {
+                // Only at normal size: zoomed in, a drag moves around the picture instead. It
+                // waits for the finger to have moved further sideways than up or down, so the
+                // page around it still scrolls.
+                val far = 64.dp.toPx()
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (scale == 1f && kotlin.math.abs(drag) > far) onSwipe(drag < 0)
+                        drag = 0f
+                    },
+                    onDragCancel = { drag = 0f },
+                ) { change, amount ->
+                    if (scale == 1f) {
+                        drag += amount
+                        change.consume()
+                    }
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -384,7 +424,7 @@ private fun VideoStage(
                 modifier = fitted.graphicsLayer {
                     scaleX = scale
                     scaleY = scale
-                    translationX = offset.x
+                    translationX = offset.x + drag
                     translationY = offset.y
                 },
             )
