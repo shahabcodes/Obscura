@@ -8,12 +8,21 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-30
+
 ### Fixed
 - **Swiping sideways did nothing on a video.** Photos have always moved to the next one with a swipe, and the tour said videos did too, but the video player only knew taps and pinches. A swipe on the picture now moves to the next video or back to the one before, and the picture follows the finger as it goes. Past either end it stays put rather than wrapping round. Zoomed in, a drag still moves around the picture instead.
 - **"Next" in the player was not the next video on the screen you came from.** The player went through every video newest first, whatever the gallery was showing — its sort order, its filter and the new length limit all ignored, so the next video could be one the gallery was hiding. Opened from the gallery, the player now follows the gallery exactly, and "Up next" with it. Opened from a search or an album, every video is still in reach.
+- **After shredding a video in the player, the screen could name a different video from the one playing.** The shredded file left the vault but stayed in the player's queue, and the screen found its video by position, so the two slipped one apart — and the Shred button with them. The confirmation always named the file, so nothing was shredded unseen. The file now leaves the queue too, and the screen finds its video by what is actually playing.
+- **A video sealed while another was playing scrambled "Up next".** An import landing under the open player shifted the vault's list by one, and Up next read its rows from that list by position: it could list the video already playing, and tapping a row played a different video from the one it named. Up next now comes from the player's own queue, and a tap plays the video the row names.
+- **Turning the phone sent the player back to the first video, from the start.** Turning it rebuilds the screen, and the player was rebuilt on the video it had been opened on. It now comes back on the video you had swiped to, at the moment you left it, playing or paused as it was.
+
+### Known
+- After the vault locks and you unlock it again, the player reopens on the video it was first opened on, not the one you had swiped to. Nothing plays behind the lock, and the name always matches what plays.
 
 ### Tests
-- Three on-device tests swipe through real clips in a gallery sorted oldest first, so the library's own newest-first order and the gallery's disagree: next and back, a swipe past the end, and a video the length limit hides. Two of them fail if the player goes back to the library's order.
+- Three on-device tests swipe through real clips in a gallery sorted oldest first, so the library's own newest-first order and the gallery's disagree: next and back, a swipe past the end, and a video the length limit hides. Two of them fail if the player goes back to the library's order. Each checks the heading, not just that the name is somewhere on screen, so an Up next row cannot pass for it.
+- Sixteen on-device journeys swipe under hostile conditions: shredding the swiped-to video, making a GIF, the screen going off or the panic lock mid-drag, zoom and pan, rotation, a video arriving while another plays, and the decoy vault. Each reads which file is really playing from the length the player reports.
 
 ## [0.15.0] - 2026-10-27
 

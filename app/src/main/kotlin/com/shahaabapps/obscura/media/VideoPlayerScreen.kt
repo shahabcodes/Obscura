@@ -99,23 +99,42 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     val factory = remember { viewModel.dataSourceFactory() } ?: return
     val player = rememberVaultPlayer(factory)
     var started by remember { mutableStateOf(false) }
-    // Asked for a video that is no longer here — shredded while the vault was locked, say.
-    // Playing whatever happens to be first instead would be answering a different question.
-    val wanted = videos.indexOfFirst { it.id == startId }
-    LaunchedEffect(videos.isNotEmpty(), wanted) {
-        if (videos.isNotEmpty() && wanted < 0) {
+    val known = remember(library.videos) { library.videos.associateBy { it.id } }
+    // The player's queue by file id, and where in it the user has got to. The queue is set once
+    // and the vault's list moves on beneath it -- an import lands, a file is shredded -- so
+    // positions in one are never positions in the other: Up next and the name are read from
+    // this. Kept across a turn of the phone, which rebuilds the screen and the player with it,
+    // so the user is put back on the video they had swiped to, at the moment they left it.
+    var queue by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
+    var atId by rememberSaveable { mutableStateOf(startId) }
+    var atMs by rememberSaveable { mutableStateOf(0L) }
+    var atPlaying by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(known.isNotEmpty()) {
+        if (started || known.isEmpty()) return@LaunchedEffect
+        val restoring = queue != null
+        val ids = queue?.filter { it in known } ?: videos.map { it.id }
+        val at = ids.indexOf(atId)
+        // Asked for a video that is no longer here — shredded while the vault was locked, say.
+        // Playing whatever happens to be first instead would be answering a different question.
+        if (at < 0) {
             onBack()
             return@LaunchedEffect
         }
-        if (!started && videos.isNotEmpty()) {
-            started = true
-            player.setMediaItems(videos.map(::mediaItem), wanted, 0)
-            player.prepare()
-            player.play()
-        }
+        started = true
+        queue = ArrayList(ids)
+        player.setMediaItems(ids.map { mediaItem(known.getValue(it)) }, at, if (restoring) atMs else 0)
+        player.prepare()
+        if (!restoring || atPlaying) player.play()
     }
     val playback = rememberPlaybackState(player)
-    val current = videos.getOrNull(playback.index) ?: videos.firstOrNull() ?: return
+    LaunchedEffect(playback.index, playback.positionMs, playback.isPlaying) {
+        if (!started) return@LaunchedEffect
+        player.currentMediaItem?.mediaId?.let { atId = it }
+        atMs = player.currentPosition.coerceAtLeast(0)
+        atPlaying = player.playWhenReady
+    }
+    val current = (player.currentMediaItem?.mediaId ?: queue?.getOrNull(playback.index))?.let(known::get)
+        ?: known[atId] ?: videos.firstOrNull() ?: return
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     // Tap the picture to get everything else out of the way; tap again to bring it back.
     var chrome by rememberSaveable { mutableStateOf(true) }
@@ -238,11 +257,15 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             SpeedChips(playback.speed) { player.setPlaybackSpeed(it) }
         }
 
-        val upNext = videos.drop(playback.index + 1).take(3)
+        val ids = queue.orEmpty()
+        val upNext = ids.drop(playback.index + 1).mapNotNull(known::get).take(3)
         if (upNext.isNotEmpty()) {
             Text("Up next", style = PrismType.heading, color = Prism.Paper)
             upNext.forEach { file ->
-                UpNextRow(file, viewModel) { player.seekTo(videos.indexOf(file), 0); player.play() }
+                UpNextRow(file, viewModel) {
+                    val at = (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == file.id }
+                    if (at != null) { player.seekTo(at, 0); player.play() }
+                }
             }
         }
     }
@@ -265,7 +288,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             containerColor = Prism.Surface,
         ) {
             SensitiveWindow()
-            val source = videos.firstOrNull { it.id == gifFromId } ?: current
+            val source = gifFromId?.let(known::get) ?: current
             val from = if (gifFromId != null) gifFromMs else playback.positionMs
             MakeGifSheet(
                 state = gif,
@@ -284,9 +307,16 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     confirmShred?.let { file ->
         ShredDialog(file, onDismiss = { confirmShred = null }) {
             confirmShred = null
-            // Leaving the queue behind: the player reloads from what is left.
             player.pause()
-            viewModel.shred(file) { if (videos.size <= 1) onBack() }
+            viewModel.shred(file) {
+                // Out of the player's queue as well as the vault, so the two stay in step and
+                // neither a swipe nor Up next can land on a file that is gone.
+                (0 until player.mediaItemCount)
+                    .firstOrNull { player.getMediaItemAt(it).mediaId == file.id }
+                    ?.let(player::removeMediaItem)
+                queue = queue?.let { ArrayList(it - file.id) }
+                if (player.mediaItemCount == 0) onBack()
+            }
         }
     }
 }

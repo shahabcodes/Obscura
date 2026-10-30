@@ -17,12 +17,14 @@ import com.shahaabapps.obscura.vault.whileOpen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -111,6 +113,9 @@ class LibraryViewModel @Inject constructor(
                 documents = all.filter { it.kind == FileKind.DOCUMENT || it.kind == FileKind.OTHER },
             )
         }
+        // Sorting and grouping the whole vault the way the gallery does is real work in a big
+        // one, and it runs again on every change while files are coming in: off the main thread.
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Library())
 
     /** Data source for Media3, or null when the vault is locked. */

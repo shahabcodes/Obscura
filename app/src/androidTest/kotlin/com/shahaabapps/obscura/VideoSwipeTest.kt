@@ -1,10 +1,12 @@
 package com.shahaabapps.obscura
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -71,19 +73,28 @@ class VideoSwipeTest {
         compose.waitUntilAtLeastOneExists(hasTestTag("Video stage"), 15_000)
     }
 
-    private fun showing(name: String) = compose.waitUntilAtLeastOneExists(hasText(name), 10_000)
+    /** The name in the heading: the top-most file name, above the Up next rows that list others. */
+    private fun heading(): String? = compose.onAllNodes(hasText(".mp4", substring = true), useUnmergedTree = true)
+        .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .minByOrNull { it.positionInRoot.y }
+        ?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+
+    private fun showing(name: String) = compose.waitUntil(10_000) { heading() == name }
 
     @Test
     fun swipingMovesToTheNextVideoOnTheGalleryAndBack() {
-        play("quick.mp4")
+        play("feature.mp4")
 
-        // Oldest first: after the two-second clip comes the ten-second one. In the library's
-        // own newest-first order there is nothing after it at all.
-        compose.onNodeWithTag("Video stage").performTouchInput { swipeLeft() }
-        showing("feature.mp4")
-
+        // Oldest first, the two-second clip comes before the ten-second one; in the library's
+        // own newest-first order nothing comes before it at all. Backwards first, which a clip
+        // running on into the next by itself can never pass for.
         compose.onNodeWithTag("Video stage").performTouchInput { swipeRight() }
         showing("quick.mp4")
+
+        // Forward again, straight away, before the two-second clip can end on its own. (The
+        // interruption journeys check forward swipes on clips far too long to run out.)
+        compose.onNodeWithTag("Video stage").performTouchInput { swipeLeft() }
+        showing("feature.mp4")
     }
 
     @Test
