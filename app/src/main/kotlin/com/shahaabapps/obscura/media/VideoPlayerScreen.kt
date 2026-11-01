@@ -8,7 +8,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +25,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -56,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +86,7 @@ import com.shahaabapps.obscura.ui.screens.formatBytes
 import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
 import com.shahaabapps.obscura.vault.VaultFile
+import kotlinx.coroutines.ensureActive
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -133,7 +136,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
         atMs = player.currentPosition.coerceAtLeast(0)
         atPlaying = player.playWhenReady
     }
-    val current = (player.currentMediaItem?.mediaId ?: queue?.getOrNull(playback.index))?.let(known::get)
+    val current = (playback.mediaId ?: queue?.getOrNull(playback.index))?.let(known::get)
         ?: known[atId] ?: videos.firstOrNull() ?: return
     var scrubbing by remember { mutableStateOf<Float?>(null) }
     // Tap the picture to get everything else out of the way; tap again to bring it back.
@@ -151,19 +154,73 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     // does, the dimensions recorded when the file was sealed keep the picture from being squeezed.
     val storedAspect = current.width?.let { w -> current.height?.takeIf { it > 0 }?.let { h -> w.toFloat() / h } }
     val aspect = playback.videoSize.aspectOrNull() ?: storedAspect
-    // Sideways to the next video or back to the last, as with photos. Past either end the
-    // swipe simply does nothing, rather than wrapping round to the far end of the list.
-    val swipe: (Boolean) -> Unit = { forward ->
-        val moved = if (forward) player.hasNextMediaItem() else player.hasPreviousMediaItem()
-        if (moved) {
-            if (forward) player.seekToNextMediaItem() else player.seekToPreviousMediaItem()
-            player.play()
+
+    // Sideways to the next video or back to the last, the way photos turn: the next one slides
+    // in under the finger, its still showing until it plays. One page per video in the player's
+    // queue, and the pages and the queue are kept on the same video both ways -- a swipe moves
+    // the player, and the player moving on by itself (the end of a clip, Up next) turns the page.
+    // The pages are there from the first frame, before the player's queue is set, as the queue
+    // it is about to be: with none at first, the pages would start on the first video and
+    // settling there would read as a swipe to it.
+    val firstIds = remember { videos.map { it.id } }
+    val pageIds = queue ?: firstIds
+    val pager = rememberPagerState(initialPage = pageIds.indexOf(atId).coerceAtLeast(0)) { pageIds.size }
+    var zoomed by remember { mutableStateOf(false) }
+    // One place decides, each time the pages come to rest, who moved: the user, by turning to a
+    // different page, or the player, by moving on while the pages stood still or were only
+    // springing back. Checked again whenever the player's place changes as well, so a move the
+    // player makes mid-drag is caught once the finger lifts rather than lost -- the page shown
+    // and the video playing (and Shred) must never be two different files.
+    val playerIndex by rememberUpdatedState(playback.index)
+    LaunchedEffect(pager) {
+        var rested = -1
+        snapshotFlow { Triple(started && !pager.isScrollInProgress, pager.settledPage, playerIndex) }
+            .collect { (still, page, _) ->
+                if (!still || player.mediaItemCount == 0) return@collect
+                // The player's own index, not the screen's copy of it, which lags a moment behind.
+                val at = player.currentMediaItemIndex
+                when {
+                    rested < 0 -> rested = page
+                    page != rested -> {
+                        // The user turned the page: the player follows.
+                        rested = page
+                        if (page != at && page < player.mediaItemCount) {
+                            player.seekTo(page, 0)
+                            player.play()
+                        }
+                    }
+                    at != page && at < pager.pageCount -> {
+                        // The player moved on: the pages follow. A finger landing mid-turn
+                        // interrupts the turn, and where it then settles is the user's choice.
+                        rested = at
+                        try {
+                            pager.animateScrollToPage(at)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            coroutineContext.ensureActive()
+                        }
+                    }
+                }
+            }
+    }
+    val stage: @Composable (Modifier, () -> Unit) -> Unit = { modifier, onTap ->
+        HorizontalPager(
+            state = pager,
+            key = { pageIds[it] },
+            userScrollEnabled = !zoomed,
+            modifier = modifier.background(Color.Black),
+        ) { page ->
+            val file = known[pageIds[page]]
+            if (page == playback.index && file != null) {
+                VideoStage(player, playback, aspect, file, viewModel, Modifier.fillMaxSize(), onZoomChanged = { zoomed = it }, onTap = onTap)
+            } else if (file != null) {
+                Still(file, viewModel, Modifier.fillMaxSize())
+            }
         }
     }
 
     if (!chrome) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            VideoStage(player, playback, aspect, Modifier.fillMaxSize(), onSwipe = swipe) { chrome = true }
+            stage(Modifier.fillMaxSize()) { chrome = true }
         }
         BackHandler { chrome = true }
         return
@@ -186,14 +243,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
         }
 
         val ratio = aspect ?: (16f / 9f)
-        VideoStage(
-            player = player,
-            playback = playback,
-            aspect = aspect,
-            modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).aspectRatio(ratio.coerceIn(0.5f, 2.4f)).clip(RoundedCornerShape(26.dp)),
-            onSwipe = swipe,
-            onTap = { chrome = false },
-        )
+        stage(Modifier.fillMaxWidth().heightIn(max = 520.dp).aspectRatio(ratio.coerceIn(0.5f, 2.4f)).clip(RoundedCornerShape(26.dp))) { chrome = false }
 
         playback.error?.let { Text(it, style = PrismType.body, color = Prism.Orange) }
 
@@ -372,10 +422,22 @@ private fun MakeGifSheet(state: GifMaking, name: String, fromMs: Long, onCreate:
     }
 }
 
+/** A video that is not the one playing: its still, as the pages either side show it. */
+@Composable
+private fun Still(file: VaultFile, viewModel: LibraryViewModel, modifier: Modifier) {
+    val thumb = rememberThumbnail(file, viewModel::thumbnail)
+    Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+        thumb?.let {
+            // No description: a file's name must not reach accessibility services from a picture.
+            androidx.compose.foundation.Image(it.asImageBitmap(), null, contentScale = androidx.compose.ui.layout.ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
 /**
- * The picture itself: pinch to zoom and drag to move once zoomed, swipe sideways for the next
- * or the last video, tap to hide everything else. The surface is marked secure, so frames never
- * reach a screenshot or a recording.
+ * The picture itself: pinch to zoom and drag to move once zoomed, tap to hide everything else.
+ * At normal size a sideways drag is left alone, for the pages to turn. The surface is marked
+ * secure, so frames never reach a screenshot or a recording.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -383,14 +445,27 @@ private fun VideoStage(
     player: androidx.media3.exoplayer.ExoPlayer,
     playback: PlaybackState,
     aspect: Float?,
+    file: VaultFile,
+    viewModel: LibraryViewModel,
     modifier: Modifier,
-    onSwipe: (forward: Boolean) -> Unit,
+    onZoomChanged: (Boolean) -> Unit,
     onTap: () -> Unit,
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    // How far a sideways swipe has carried the picture, so it follows the finger.
-    var drag by remember { mutableFloatStateOf(0f) }
+    // Back to normal size whenever this page is left, so the pages can turn again.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { onZoomChanged(false) } }
+    // Whether this page's surface has a frame on it yet.
+    var drawn by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                drawn = true
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
 
     Box(
         modifier
@@ -407,6 +482,7 @@ private fun VideoStage(
                         } else {
                             scale = 2f
                         }
+                        onZoomChanged(scale > 1f)
                     },
                 )
             }
@@ -418,27 +494,10 @@ private fun VideoStage(
                         if (event.changes.size > 1 || scale > 1f) {
                             scale = (scale * event.calculateZoom()).coerceIn(1f, 6f)
                             offset = if (scale == 1f) Offset.Zero else offset + event.calculatePan()
+                            onZoomChanged(scale > 1f)
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
-                }
-            }
-            .pointerInput(Unit) {
-                // Only at normal size: zoomed in, a drag moves around the picture instead. It
-                // waits for the finger to have moved further sideways than up or down, so the
-                // page around it still scrolls.
-                val far = 64.dp.toPx()
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (scale == 1f && kotlin.math.abs(drag) > far) onSwipe(drag < 0)
-                        drag = 0f
-                    },
-                    onDragCancel = { drag = 0f },
-                ) { change, amount ->
-                    if (scale == 1f) {
-                        drag += amount
-                        change.consume()
-                    }
                 }
             },
         contentAlignment = Alignment.Center,
@@ -451,14 +510,20 @@ private fun VideoStage(
                         player.setVideoSurfaceView(this)
                     }
                 },
+                // Handed on to the next page's surface; this only lets go if it still has it.
+                onRelease = { player.clearVideoSurfaceView(it) },
                 modifier = fitted.graphicsLayer {
                     scaleX = scale
                     scaleY = scale
-                    translationX = offset.x + drag
+                    translationX = offset.x
                     translationY = offset.y
                 },
             )
         }
+        // Over the picture until its first frame is drawn, so a page turned to shows its still
+        // rather than black. Over, not under: a SurfaceView shows through a hole cut in the
+        // window, which hides anything drawn beneath it.
+        if (!drawn) Still(file, viewModel, Modifier.fillMaxSize())
         if (!playback.isPlaying) {
             Box(
                 Modifier.size(68.dp).clip(CircleShape).background(Prism.Ink.copy(alpha = 0.8f))

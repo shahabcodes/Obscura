@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -118,6 +120,33 @@ class OrganizeFlowTest {
         compose.waitUntil(5_000) {
             runBlocking { entry.session().openVault!!.database.albums().observeSummaries().first().singleOrNull()?.count == 1 }
         }
+    }
+
+    @Test
+    fun favouritesShowAsAnAlbumOfTheirOwn() {
+        compose.onNodeWithContentDescription("Albums").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Album Favourites, 0 items"), 5_000)
+
+        compose.onNodeWithContentDescription("Home").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("SEALED ON THIS PHONE"), 5_000)
+        compose.onNodeWithText("Photos").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("JPG, passport-photo.jpg"), 10_000)
+        compose.onNodeWithContentDescription("JPG, passport-photo.jpg").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Add to favourites"), 10_000)
+        compose.onNodeWithContentDescription("Add to favourites").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Remove from favourites"), 5_000)
+        // Out of the viewer, then out of the gallery to the home screen and its tab bar.
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Videos"), 5_000)
+        scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntilAtLeastOneExists(hasText("SEALED ON THIS PHONE"), 5_000)
+
+        // A heart is enough: the file needs no album of its own to show up here.
+        compose.onNodeWithContentDescription("Albums").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Album Favourites, 1 items"), 5_000)
+        compose.onNodeWithContentDescription("Album Favourites, 1 items").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("JPG, passport-photo.jpg"), 5_000)
+        compose.onAllNodes(hasContentDescription("Edit album")).assertCountEquals(0)
     }
 
     @Test

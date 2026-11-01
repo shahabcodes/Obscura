@@ -69,10 +69,34 @@ class AlbumsViewModel @Inject constructor(private val session: VaultSession) : V
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun album(id: String) = session.openVault?.database?.albums()?.observe(id) ?: flowOf(null)
+    /**
+     * Favourites, shown as an album of their own beside the user's: every file with a heart,
+     * wherever else it is filed. Not a real album, so a file can be in one and here too.
+     */
+    val favourites: StateFlow<AlbumSummary?> = session.state
+        .flatMapLatest { s ->
+            (s as? VaultState.Unlocked)?.vault?.database?.files()?.observeFavorites()?.whileOpen(emptyList())
+                ?: flowOf(emptyList())
+        }
+        .map { files ->
+            AlbumSummary(
+                id = FAVOURITES,
+                name = "Favourites",
+                color = 0xFFFF7AB6,
+                count = files.size,
+                bytes = files.sumOf { it.sizeBytes },
+                coverId = files.firstOrNull { it.kind == FileKind.PHOTO || it.kind == FileKind.VIDEO }?.id,
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun filesIn(id: String) =
-        session.openVault?.database?.files()?.observeInAlbum(id)?.whileOpen(emptyList()) ?: flowOf(emptyList())
+    fun album(id: String) =
+        if (id == FAVOURITES) favourites.map { it?.let { f -> Album(f.id, f.name, f.color, 0) } }
+        else session.openVault?.database?.albums()?.observe(id) ?: flowOf(null)
+
+    fun filesIn(id: String) = session.openVault?.database?.files()
+        ?.let { if (id == FAVOURITES) it.observeFavorites() else it.observeInAlbum(id) }
+        ?.whileOpen(emptyList()) ?: flowOf(emptyList())
 
     suspend fun file(id: String): VaultFile? = session.openVault?.database?.files()?.get(id)
 
@@ -103,6 +127,9 @@ class AlbumsViewModel @Inject constructor(private val session: VaultSession) : V
     }
 
     companion object {
+        /** The favourites' id in the album routes: never a real album's, which are hex. */
+        const val FAVOURITES = "favourites"
+
         val COLORS = listOf(0xFF3B5BFF, 0xFFFF7AB6, 0xFF5EF0C2, 0xFFFF8A3D, 0xFFFFE14D, 0xFFF5F5F0)
     }
 }

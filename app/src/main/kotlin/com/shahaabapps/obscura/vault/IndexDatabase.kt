@@ -165,6 +165,9 @@ interface FileDao {
     @Query("SELECT * FROM files WHERE albumId = :albumId ORDER BY takenAt DESC")
     fun observeInAlbum(albumId: String): Flow<List<VaultFile>>
 
+    @Query("SELECT * FROM files WHERE favorite = 1 ORDER BY takenAt DESC")
+    fun observeFavorites(): Flow<List<VaultFile>>
+
     /**
      * Case-insensitive name search. [pattern] must already be a LIKE pattern with `%`, `_` and
      * `\` escaped (see [likePattern]).

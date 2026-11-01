@@ -88,16 +88,20 @@ class VideoSwipeInterruptionTest {
         TestScreen.shell("settings put secure immersive_mode_confirmations confirmed")
         LastPlace.forget()
         VideoLengthFixture.wipe()
+        // Long clips, so nothing moves on by itself while a step is being checked. Encoded
+        // before the vault exists: it takes a while, and a lock left pending by the test before
+        // can land in that time.
+        val clips = listOf(30 to "quick.mp4", 40 to "middle.mp4", 50 to "feature.mp4")
+            .associate { (secs, name) -> name to VideoLengthFixture.encodeMp4(secs, "fx-$name") }
         runBlocking {
-            // Long clips, so nothing moves on by itself while a step is being checked.
             entry.session().create(VideoLengthFixture.PASSPHRASE.toCharArray())
             entry.session().openVault!!.files.put(
                 VideoLengthFixture.jpeg().inputStream(),
                 com.shahaabapps.obscura.vault.IncomingFile("beach.jpg", "image/jpeg", 1_700_000_000_000),
             )
-            seconds["quick.mp4"] = clip(30, "quick.mp4", 1_700_000_100_000)
-            seconds["middle.mp4"] = clip(40, "middle.mp4", 1_700_000_150_000)
-            seconds["feature.mp4"] = clip(50, "feature.mp4", 1_700_000_200_000)
+            seconds["quick.mp4"] = clip(clips.getValue("quick.mp4"), "quick.mp4", 1_700_000_100_000)
+            seconds["middle.mp4"] = clip(clips.getValue("middle.mp4"), "middle.mp4", 1_700_000_150_000)
+            seconds["feature.mp4"] = clip(clips.getValue("feature.mp4"), "feature.mp4", 1_700_000_200_000)
         }
         // Oldest first: quick, middle, feature.
         instrumentation.runOnMainSync {
@@ -128,8 +132,8 @@ class VideoSwipeInterruptionTest {
         TestScreen.wake()
     }
 
-    private suspend fun clip(secs: Int, name: String, takenAt: Long): Int =
-        (VideoLengthFixture.seal(VideoLengthFixture.encodeMp4(secs, "fx-$name"), name, takenAt) / 1000).toInt()
+    private suspend fun clip(file: java.io.File, name: String, takenAt: Long): Int =
+        (VideoLengthFixture.seal(file, name, takenAt) / 1000).toInt()
 
     // ---- getting there ----
 
@@ -239,9 +243,19 @@ class VideoSwipeInterruptionTest {
 
     /** A real swipe through the window manager, not one injected under any window above. */
     private fun realSwipe(dx: Int, dy: Int = 0, ms: Int = 250, from: Offset = stageCentreOnScreen()) {
-        TestScreen.shell("input swipe ${from.x.toInt()} ${from.y.toInt()} ${(from.x + dx).toInt()} ${(from.y + dy).toInt()} $ms")
+        // Centred on [from] sideways. `input swipe` pauses before lifting, which reads as a drag
+        // let go with no speed, so the page only turns once it has gone past half way -- hence
+        // [far] rather than a flick.
+        val x0 = from.x - dx / 2f
+        TestScreen.shell("input swipe ${x0.toInt()} ${from.y.toInt()} ${(x0 + dx).toInt()} ${(from.y + dy).toInt()} $ms")
         Thread.sleep(400)
+        // The page settles by animation, which runs on the rule's clock: let it finish, or the
+        // next touch catches the page mid-turn and it springs back -- as a hand never would.
+        compose.waitForIdle()
     }
+
+    /** Most of the way across the picture: a swipe this long turns the page with no fling. */
+    private fun far(): Int = (stage().size.width * 0.7f).toInt()
 
     private fun rotate(landscape: Boolean) {
         rotated = true
@@ -354,7 +368,7 @@ class VideoSwipeInterruptionTest {
     fun aVideoArrivingWhileOneIsPlayingDoesNotRelabelIt() {
         play("middle.mp4")
         runBlocking {
-            seconds["early.mp4"] = clip(20, "early.mp4", 1_699_000_000_000)
+            seconds["early.mp4"] = clip(VideoLengthFixture.encodeMp4(20, "fx-early.mp4"), "early.mp4", 1_699_000_000_000)
         }
         compose.waitUntil(10_000) { "early.mp4" in videoNames() }
         Thread.sleep(1_500)
@@ -391,7 +405,7 @@ class VideoSwipeInterruptionTest {
         // Tap: everything but the picture goes.
         tapStage()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Make a GIF").fetchSemanticsNodes().isEmpty() && title() == null }
-        realSwipe(-600)
+        realSwipe(-far())
         // Tap to bring it back and see where the full-screen swipe went.
         tapStage()
         showing("feature.mp4")
@@ -409,7 +423,7 @@ class VideoSwipeInterruptionTest {
         // And swipe back, in landscape.
         tapStage()
         compose.waitUntil(5_000) { title() == null }
-        realSwipe(600)
+        realSwipe(far())
         tapStage()
         showing("middle.mp4")
         rotate(landscape = false)
@@ -458,7 +472,7 @@ class VideoSwipeInterruptionTest {
         st.performTouchInput { swipeRight() }
         Thread.sleep(1_200)
         showing("middle.mp4")
-        realSwipe(-600)
+        realSwipe(-far())
         Thread.sleep(800)
         showing("middle.mp4")
 
@@ -582,7 +596,7 @@ class VideoSwipeInterruptionTest {
         compose.waitUntilAtLeastOneExists(hasText("From \"middle.mp4\"", substring = true), 10_000)
         // A real swipe where the picture is, under the sheet's scrim. Lifting the sheet is fine
         // (it was not making anything yet); moving the video under it is not.
-        realSwipe(-600, from = stageAt)
+        realSwipe(-far(), from = stageAt)
         Thread.sleep(800)
         val sheetStayed = compose.onAllNodesWithText("From \"middle.mp4\"", substring = true).fetchSemanticsNodes().isNotEmpty()
         log("swiped under the open sheet: sheetStayed=$sheetStayed ${describe()}")
@@ -593,7 +607,7 @@ class VideoSwipeInterruptionTest {
         }
         compose.onNodeWithText("Make the GIF").performClick()
         // While it runs.
-        repeat(3) { realSwipe(-600, from = stageAt) }
+        repeat(3) { realSwipe(-far(), from = stageAt) }
         compose.waitUntilAtLeastOneExists(hasText("Saved as", substring = true), 60_000)
         compose.waitUntilAtLeastOneExists(hasText("middle.gif", substring = true), 5_000)
         compose.onNodeWithText("Done").performClick()

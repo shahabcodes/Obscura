@@ -74,6 +74,7 @@ import com.shahaabapps.obscura.vault.VaultFile
 @Composable
 fun AlbumsScreen(onOpenAlbum: (String) -> Unit, viewModel: AlbumsViewModel = hiltViewModel()) {
     val albums by viewModel.albums.collectAsStateWithLifecycle()
+    val favourites by viewModel.favourites.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
 
     LazyVerticalGrid(
@@ -102,6 +103,9 @@ fun AlbumsScreen(onOpenAlbum: (String) -> Unit, viewModel: AlbumsViewModel = hil
                     creating = false
                 }
             }
+        }
+        favourites?.let { f ->
+            item(key = f.id) { AlbumCard(f, viewModel) { onOpenAlbum(f.id) } }
         }
         val list = albums
         if (list != null && list.isEmpty() && !creating) {
@@ -194,7 +198,8 @@ fun AlbumScreen(id: String, onBack: () -> Unit, onOpenFile: (VaultFile) -> Unit,
                         Text(album?.name ?: "", style = PrismType.title, color = Prism.Paper, maxLines = 1)
                         Text("%,d ITEMS".format(files.size), style = PrismType.label, color = Prism.Muted)
                     }
-                    RoundIconButton(Icons.Outlined.Edit, "Edit album", { editing = !editing })
+                    // Favourites are made by the heart on each file, not named or coloured here.
+                    if (id != AlbumsViewModel.FAVOURITES) RoundIconButton(Icons.Outlined.Edit, "Edit album", { editing = !editing })
                 }
                 if (editing) album?.let { a ->
                     AlbumEditor(a.name, a.color, "Save") { name, color ->
@@ -203,7 +208,10 @@ fun AlbumScreen(id: String, onBack: () -> Unit, onOpenFile: (VaultFile) -> Unit,
                     }
                     TextButton(onClick = { confirmDelete = true }) { Text("Delete album (files stay in the vault)", color = Prism.Orange, style = PrismType.body) }
                 }
-                if (files.isEmpty()) EmptyState("This album is empty.", text = "Open a photo or video and tap Album to add it here.")
+                if (files.isEmpty()) {
+                    if (id == AlbumsViewModel.FAVOURITES) EmptyState("No favourites yet.", text = "Open a photo or video and tap the heart to add it here.")
+                    else EmptyState("This album is empty.", text = "Open a photo or video and tap Album to add it here.")
+                }
             }
         }
         items(files, key = { it.id }) { file ->

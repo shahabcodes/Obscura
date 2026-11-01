@@ -58,6 +58,8 @@ data class PlaybackState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val index: Int = 0,
+    /** The id of the item playing, so the screen never has to ask the player while drawing. */
+    val mediaId: String? = null,
     val videoSize: VideoSize = VideoSize.UNKNOWN,
     val speed: Float = 1f,
     val repeat: Boolean = false,
@@ -74,6 +76,7 @@ fun rememberPlaybackState(player: Player): PlaybackState {
         positionMs = player.currentPosition.coerceAtLeast(0),
         durationMs = player.duration.takeIf { it > 0 } ?: 0,
         index = player.currentMediaItemIndex,
+        mediaId = player.currentMediaItem?.mediaId,
         videoSize = player.videoSize,
         speed = player.playbackParameters.speed,
         repeat = player.repeatMode != Player.REPEAT_MODE_OFF,

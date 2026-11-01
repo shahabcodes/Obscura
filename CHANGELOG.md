@@ -8,6 +8,21 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-01
+
+### Added
+- **Favourites in Albums.** Albums now opens with a Favourites album of its own: every photo, video and GIF with a heart, whatever album it is also in. It fills and empties as you tap the heart; there is nothing to name or colour.
+
+### Changed
+- **Swiping between videos works the way it does between photos.** The video now moves with your finger and the next one slides in beside it, showing its still until it starts to play, in the player and in full screen alike. Before, the picture shifted a little and then cut to the next video. As with photos, a short, slow drag springs back, and a flick or a drag past halfway turns to the next.
+
+### Fixed
+- The stills beside the playing video carried the file's name to accessibility services; they no longer carry any.
+- Found before release: if the player moved on by itself while the pages were being dragged or springing back -- a clip ending under a resting finger, or Up next tapped mid-turn -- the page in view stayed on the old video while the new one played, and Shred would have named the one playing. The pages and the player are now reconciled every time the pages come to rest.
+
+### Tests
+- On-device: eight pager journeys check that the page in view is the one playing -- a clip ending under a held finger, Up next tapped mid-turn, turning the phone mid-drag, shredding the last video, the screen going off before a page settles, and swiping from the Favourites album, including the decoy. The Favourites album fills from the heart in the viewer and has no Edit button. The swipe journeys now use swipes long enough to turn a page, wait for the page to settle, and encode their clips before the vault is made, so a lock pending from the test before cannot land mid-setup.
+
 ## [0.15.1] - 2026-10-30
 
 ### Fixed
