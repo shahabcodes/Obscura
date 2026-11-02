@@ -8,6 +8,21 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-02
+
+### Added
+- **Heart and album buttons in the video player.** Beside the video's name, next to Make a GIF and Shred, as the photo viewer already had them. Both only mark the file where it already is; nothing is copied. The album sheet names the clip it is filing.
+
+### Fixed
+- Found before release: a heart, Album or Shred tapped while the next clip was still sliding in acted on the clip sliding away. They now act on the clip on screen.
+
+### Tests
+- A device test in each viewer hearts a file and files it into a new album, then checks the vault holds the same number of files and sealed blobs as before.
+- Interruption journeys for the new buttons: taps mid-slide, the clip ending under the open sheet, rotation, locking, panic, screen off, shredding a filed clip, and process death (run in two halves by hand).
+
+### Known
+- A half-typed new album name is lost if the phone turns while the sheet is open. Nothing is created; the name just has to be typed again.
+
 ## [0.16.0] - 2026-11-01
 
 ### Added

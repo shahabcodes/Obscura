@@ -155,6 +155,11 @@ class LibraryViewModel @Inject constructor(
         }.getOrNull()
     }
 
+    /** Only the flag on the file's own index entry changes: nothing is copied. */
+    fun setFavorite(file: VaultFile, favorite: Boolean) {
+        viewModelScope.launch { session.openVault?.database?.files()?.setFavorite(file.id, favorite) }
+    }
+
     fun shred(file: VaultFile, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             session.openVault?.shred(file)

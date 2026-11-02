@@ -34,9 +34,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Forward10
 import androidx.compose.material.icons.outlined.Gif
 import androidx.compose.material.icons.outlined.Replay10
@@ -142,6 +145,7 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     // Tap the picture to get everything else out of the way; tap again to bring it back.
     var chrome by rememberSaveable { mutableStateOf(true) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
+    var albumForId by rememberSaveable { mutableStateOf<String?>(null) }
     // Kept across a turn of the phone, which rebuilds the screen: losing the sheet mid-GIF
     // would leave the work running with no progress and no word of where it went.
     var makingGif by rememberSaveable { mutableStateOf(false) }
@@ -257,6 +261,21 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 )
             }
             Spacer(Modifier.width(10.dp))
+            // The clip on screen, which leads the one playing while a page is still sliding in:
+            // a heart or an album tapped mid-slide is meant for the clip arriving. Read again at
+            // the tap itself, since the page can turn before the screen is next drawn.
+            val onPageNow = { pageIds.getOrNull(pager.currentPage)?.let(known::get) ?: current }
+            val onPage = onPageNow()
+            RoundIconButton(
+                if (onPage.favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                if (onPage.favorite) "Remove from favourites" else "Add to favourites",
+                { onPageNow().let { viewModel.setFavorite(it, !it.favorite) } },
+                content = if (onPage.favorite) Prism.Pink else Prism.Paper,
+            )
+            Spacer(Modifier.width(6.dp))
+            // Pinned like the GIF below: the player may move on while the sheet is open.
+            RoundIconButton(Icons.Outlined.Folder, "Album", { albumForId = onPageNow().id }, content = if (onPage.albumId != null) Prism.Sun else Prism.Paper)
+            Spacer(Modifier.width(6.dp))
             RoundIconButton(Icons.Outlined.Gif, "Make a GIF", {
                 viewModel.dismissGif()
                 // Pinned here: the player moves on by itself, and the GIF must come from the clip
@@ -268,8 +287,8 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 gifFromMs = player.currentPosition.coerceAtLeast(0)
                 makingGif = true
             })
-            Spacer(Modifier.width(8.dp))
-            RoundIconButton(Icons.Outlined.DeleteForever, "Shred", { confirmShred = current }, content = Prism.Orange)
+            Spacer(Modifier.width(6.dp))
+            RoundIconButton(Icons.Outlined.DeleteForever, "Shred", { confirmShred = onPageNow() }, content = Prism.Orange)
         }
 
         Column {
@@ -351,6 +370,15 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                     viewModel.dismissGif()
                 },
             )
+        }
+    }
+
+    albumForId?.let(known::get)?.let { file ->
+        ModalBottomSheet(onDismissRequest = { albumForId = null }, containerColor = Prism.Surface) {
+            SensitiveWindow()
+            // Named, so it is plain which clip is being filed.
+            Text(file.name, style = PrismType.label, color = Prism.Muted, maxLines = 1, modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 6.dp))
+            com.shahaabapps.obscura.ui.organize.AlbumPicker(listOf(file.id), file.albumId, onDone = { albumForId = null })
         }
     }
 
