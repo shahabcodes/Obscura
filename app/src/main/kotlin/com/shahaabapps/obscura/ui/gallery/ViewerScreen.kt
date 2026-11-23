@@ -141,7 +141,7 @@ fun ViewerScreen(viewModel: GalleryViewModel, startId: String, onBack: () -> Uni
                 CircleButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Prism.Paper) }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(current.takenAt)), style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper)
+                    Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(current.takenAt)), style = PrismType.body.copy(fontWeight = PrismType.button.fontWeight), color = Prism.Paper)
                     Text("%,d OF %,d · %s".format(pager.currentPage + 1, files.size, formatBytes(current.sizeBytes)), style = PrismType.label, color = Prism.Muted)
                 }
                 CircleButton(onClick = {

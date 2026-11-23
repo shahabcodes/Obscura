@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Forward10
 import androidx.compose.material.icons.outlined.Gif
 import androidx.compose.material.icons.outlined.Replay10
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
@@ -90,6 +91,8 @@ import com.shahaabapps.obscura.ui.theme.Prism
 import com.shahaabapps.obscura.ui.theme.PrismType
 import com.shahaabapps.obscura.vault.VaultFile
 import kotlinx.coroutines.ensureActive
+import java.text.DateFormat
+import java.util.Date
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -146,6 +149,8 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
     var chrome by rememberSaveable { mutableStateOf(true) }
     var confirmShred by remember { mutableStateOf<VaultFile?>(null) }
     var albumForId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sharingId by remember { mutableStateOf<String?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     // Kept across a turn of the phone, which rebuilds the screen: losing the sheet mid-GIF
     // would leave the work running with no progress and no word of where it went.
     var makingGif by rememberSaveable { mutableStateOf(false) }
@@ -251,19 +256,25 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
 
         playback.error?.let { Text(it, style = PrismType.body, color = Prism.Orange) }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(current.name, style = PrismType.heading, color = Prism.Paper, maxLines = 2)
-                Text(
-                    listOfNotNull(current.durationMs?.let(::formatDuration), formatBytes(current.sizeBytes), current.width?.let { "${it}×${current.height}" }).joinToString(" · "),
-                    style = PrismType.label,
-                    color = Prism.Muted,
-                )
-            }
-            Spacer(Modifier.width(10.dp))
+        Column {
+            Text(current.name, style = PrismType.heading, color = Prism.Paper, maxLines = 2)
+            Text(
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(current.takenAt)),
+                style = PrismType.body,
+                color = Prism.Paper,
+            )
+            Text(
+                listOfNotNull(current.durationMs?.let(::formatDuration), formatBytes(current.sizeBytes), current.width?.let { "${it}×${current.height}" }).joinToString(" · "),
+                style = PrismType.label,
+                color = Prism.Muted,
+            )
+        }
+
+        // A row of their own under the name, so the name keeps the full width.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // The clip on screen, which leads the one playing while a page is still sliding in:
-            // a heart or an album tapped mid-slide is meant for the clip arriving. Read again at
-            // the tap itself, since the page can turn before the screen is next drawn.
+            // a heart, an album or a share tapped mid-slide is meant for the clip arriving. Read
+            // again at the tap itself, since the page can turn before the screen is next drawn.
             val onPageNow = { pageIds.getOrNull(pager.currentPage)?.let(known::get) ?: current }
             val onPage = onPageNow()
             RoundIconButton(
@@ -272,10 +283,9 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 { onPageNow().let { viewModel.setFavorite(it, !it.favorite) } },
                 content = if (onPage.favorite) Prism.Pink else Prism.Paper,
             )
-            Spacer(Modifier.width(6.dp))
             // Pinned like the GIF below: the player may move on while the sheet is open.
             RoundIconButton(Icons.Outlined.Folder, "Album", { albumForId = onPageNow().id }, content = if (onPage.albumId != null) Prism.Sun else Prism.Paper)
-            Spacer(Modifier.width(6.dp))
+            RoundIconButton(Icons.Outlined.Share, "Share", { sharingId = onPageNow().id })
             RoundIconButton(Icons.Outlined.Gif, "Make a GIF", {
                 viewModel.dismissGif()
                 // Pinned here: the player moves on by itself, and the GIF must come from the clip
@@ -287,7 +297,6 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
                 gifFromMs = player.currentPosition.coerceAtLeast(0)
                 makingGif = true
             })
-            Spacer(Modifier.width(6.dp))
             RoundIconButton(Icons.Outlined.DeleteForever, "Shred", { confirmShred = onPageNow() }, content = Prism.Orange)
         }
 
@@ -380,6 +389,20 @@ fun VideoPlayerScreen(viewModel: LibraryViewModel, startId: String, onBack: () -
             Text(file.name, style = PrismType.label, color = Prism.Muted, maxLines = 1, modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 6.dp))
             com.shahaabapps.obscura.ui.organize.AlbumPicker(listOf(file.id), file.albumId, onDone = { albumForId = null })
         }
+    }
+
+    sharingId?.let(known::get)?.let { file ->
+        // The same warning as the photo viewer's: the app picked gets a copy Obscura can't take back.
+        com.shahaabapps.obscura.ui.gallery.BulkConfirm(
+            action = com.shahaabapps.obscura.ui.gallery.BulkAction.SHARE,
+            count = 1,
+            onConfirm = {
+                sharingId = null
+                player.pause()
+                context.startActivity(viewModel.share(file))
+            },
+            onDismiss = { sharingId = null },
+        )
     }
 
     confirmShred?.let { file ->

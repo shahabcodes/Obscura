@@ -8,6 +8,24 @@ section as the GitHub release notes.
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-11-23
+
+### Added
+- **Share from the video player.** A Share button beside the heart and Album, with the same warning the photo viewer gives before handing a readable copy to another app (WhatsApp or any other). Like the other buttons it acts on the clip on screen.
+- **When a video was taken.** The video player shows the date and time under the video's name.
+
+### Changed
+- The photo viewer shows the time a photo was taken as well as the date.
+- The video player's buttons sit in a row of their own under the name, so a long name has room.
+
+### Tests
+- Opened from Favourites, a video and a photo each show their date and time and offer Share.
+- Share journeys from the video player: a stand-in receiving app under its own UID reads exactly the clip's bytes until the vault locks; a share tapped mid-slide sends the arriving clip; rotation, locking, panic and process death with the warning open send nothing; decoy and real vault links never cross; no copies are made.
+
+### Known
+- After a share, turning the screen off waits up to a minute before locking, even if the share was cancelled (true since 0.10.0 for photo sharing). Panic lock still locks at once.
+- The playback speed chips crowd together on phones 360 dp wide or narrower.
+
 ## [0.16.1] - 2026-11-02
 
 ### Added

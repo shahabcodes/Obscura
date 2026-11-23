@@ -52,6 +52,7 @@ class LibraryViewModel @Inject constructor(
     private val session: VaultSession,
     private val autoLock: com.shahaabapps.obscura.vault.AutoLock,
     private val gallerySettings: GallerySettingsStore,
+    private val shareGrants: com.shahaabapps.obscura.export.ShareGrants,
 ) : ViewModel() {
 
     private val _gif = kotlinx.coroutines.flow.MutableStateFlow(GifMaking())
@@ -159,6 +160,10 @@ class LibraryViewModel @Inject constructor(
     fun setFavorite(file: VaultFile, favorite: Boolean) {
         viewModelScope.launch { session.openVault?.database?.files()?.setFavorite(file.id, favorite) }
     }
+
+    /** The same short-lived share links the photo viewer hands out, which stop working on lock. */
+    fun share(file: VaultFile): android.content.Intent =
+        com.shahaabapps.obscura.export.shareIntent(shareGrants.grant(listOf(file)), listOf(file))
 
     fun shred(file: VaultFile, onDone: () -> Unit = {}) {
         viewModelScope.launch {

@@ -96,6 +96,39 @@ class ViewerFavouriteAlbumTest {
         assertEquals(3, files().size)
     }
 
+    private fun takenAt(name: String) = java.text.DateFormat
+        .getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+        .format(java.util.Date(named(name).takenAt))
+
+    /** Opened from Favourites, a video and a photo each say when they were taken and can be shared. */
+    @Test
+    fun fileOpenedFromFavouritesShowsWhenAndShares() {
+        runBlocking {
+            val dao = entry.session().openVault!!.database.files()
+            dao.setFavorite(named("quick.mp4").id, true)
+            dao.setFavorite(named("beach.jpg").id, true)
+        }
+        compose.onNodeWithContentDescription("Albums").performClick()
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Album Favourites, 2 items"), 5_000)
+        compose.onNodeWithContentDescription("Album Favourites, 2 items").performClick()
+
+        compose.waitUntilAtLeastOneExists(hasContentDescription("Video, quick.mp4"), 10_000)
+        compose.onNodeWithContentDescription("Video, quick.mp4").performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("Video stage"), 15_000)
+        compose.waitUntilAtLeastOneExists(hasText(takenAt("quick.mp4")), 5_000)
+        compose.onNodeWithContentDescription("Share").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Share 1 file?"), 5_000)
+        compose.onNodeWithText("Cancel").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Share 1 file?")).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithContentDescription("Back").performClick()
+
+        compose.waitUntilAtLeastOneExists(hasContentDescription("JPG, beach.jpg"), 10_000)
+        compose.onNodeWithContentDescription("JPG, beach.jpg").performClick()
+        compose.waitUntilAtLeastOneExists(hasText(takenAt("beach.jpg")), 10_000)
+        compose.onNodeWithText("Share").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Share 1 file?"), 5_000)
+    }
+
     @Test
     fun thePhotoViewerHeartsAndFilesThePhotoItself() {
         compose.onNodeWithText("Photos").performClick()

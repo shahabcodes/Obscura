@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Test APK only. A stand-in for "the app the user picks" in the share chooser: it runs in the
+  test package's own process, under its own UID, so it reads share links exactly as another app
+  would. See probe/ShareProbeActivity.java.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="com.shahaabapps.obscura.probe.ShareProbeActivity"
+            android:exported="true"
+            android:label="Share probe"
+            android:process=":probe">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
